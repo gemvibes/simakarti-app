@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SIMAKARTI v1.5</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Segoe UI', Roboto, sans-serif; background-color: #f0f2f5; margin: 0; color: #1c1e21; }
+        
+        /* Header */
+        .header { background: #0052cc; color: white; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header h1 { margin: 0; font-size: 22px; letter-spacing: -0.5px; }
+        .header p { margin: 5px 0 0; font-size: 10px; font-weight: bold; opacity: 0.8; text-transform: uppercase; }
+
+        .container { padding: 15px; max-width: 500px; margin: auto; }
+
+        /* Card Saldo */
+        .saldo-card { 
+            background: linear-gradient(135deg, #0052cc 0%, #0747a6 100%);
+            border-radius: 16px; padding: 20px; color: white;
+            box-shadow: 0 8px 20px rgba(7, 71, 166, 0.2); margin-bottom: 20px;
+        }
+        .saldo-label { font-size: 11px; text-transform: uppercase; font-weight: bold; opacity: 0.7; margin-bottom: 4px; }
+        .saldo-main { font-size: 32px; font-weight: 800; margin: 0; }
+        .saldo-sub { display: flex; justify-content: space-between; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); pt: 15px; padding-top: 10px; }
+        .saldo-sub div p { margin: 0; font-size: 9px; opacity: 0.7; }
+        .saldo-sub div h4 { margin: 0; font-size: 14px; }
+
+        /* Grid Menu */
+        .grid-menu { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .menu-item { 
+            background: white; border-radius: 12px; padding: 20px; text-align: center;
+            border: 1px solid #e1e4e8; transition: all 0.2s; cursor: pointer;
+        }
+        .menu-item:active { background: #f0f2f5; transform: scale(0.95); }
+        .menu-icon { font-size: 30px; display: block; margin-bottom: 8px; }
+        .menu-label { font-size: 12px; font-weight: bold; color: #444; text-transform: uppercase; }
+
+        /* List Laporan */
+        .list-item { 
+            background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px;
+            display: flex; justify-content: space-between; align-items: center; border: 1px solid #eee;
+        }
+        .list-info p { margin: 0; font-size: 13px; font-weight: 600; }
+        .list-info span { font-size: 10px; color: #888; }
+        .nominal-in { color: #00875a; font-weight: bold; }
+        .nominal-out { color: #de350b; font-weight: bold; }
+
+        .btn-back { background: none; border: none; color: white; font-size: 24px; cursor: pointer; padding: 0; margin-right: 15px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        const App = () => {
+            const [page, setPage] = useState('dashboard');
+
+            const Dashboard = () => (
+                <div>
+                    <div className="header">
+                        <h1>SIMAKARTI</h1>
+                        <p>RT 03 RW 03 Purwokerto Lor</p>
+                    </div>
+                    <div className="container">
+                        <div className="saldo-card">
+                            <div className="saldo-label">Total Saldo Kas RT</div>
+                            <h2 className="saldo-main">Rp 3.520.000</h2>
+                            <div className="saldo-sub">
+                                <div>
+                                    <p>KAS KEMATIAN</p>
+                                    <h4>Rp 850.000</h4>
+                                </div>
+                                <div style={{textAlign: 'right'}}>
+                                    <p>UPDATE TERAKHIR</p>
+                                    <h4>Hari ini, 19:30</h4>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid-menu">
+                            <div className="menu-item" onClick={() => setPage('dawis')}>
+                                <span className="menu-icon">💰</span>
+                                <span className="menu-label">Iuran Dawis</span>
+                            </div>
+                            <div className="menu-item" onClick={() => setPage('laporan')}>
+                                <span className="menu-icon">📊</span>
+                                <span className="menu-label">Laporan Kas</span>
+                            </div>
+                            <div className="menu-item" onClick={() => alert('Fitur Toko')}>
+                                <span className="menu-icon">🏪</span>
+                                <span className="menu-label">Kas Toko</span>
+                            </div>
+                            <div className="menu-item" onClick={() => alert('Fitur Presensi')}>
+                                <span className="menu-icon">📝</span>
+                                <span className="menu-label">Presensi</span>
+                            </div>
+                            <div className="menu-item" onClick={() => alert('Fitur Pengeluaran')}>
+                                <span className="menu-icon">💸</span>
+                                <span className="menu-label">Pengeluaran</span>
+                            </div>
+                            <div className="menu-item" onClick={() => alert('Fitur Profil')}>
+                                <span className="menu-icon">👤</span>
+                                <span className="menu-label">Profil</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const Laporan = () => (
+                <div>
+                    <div className="header" style={{display: 'flex', alignItems: 'center'}}>
+                        <button className="btn-back" onClick={() => setPage('dashboard')}>←</button>
+                        <h1>Riwayat Kas</h1>
+                    </div>
+                    <div className="container">
+                        <div className="list-item">
+                            <div className="list-info">
+                                <p>Iuran Dawis - Bp. Ahmad</p>
+                                <span>15 Feb 2026</span>
+                            </div>
+                            <div className="nominal-in">+ Rp 20.000</div>
+                        </div>
+                        <div className="list-item">
+                            <div className="list-info">
+                                <p>Sewa Toko Dunia Baru</p>
+                                <span>14 Feb 2026</span>
+                            </div>
+                            <div className="nominal-in">+ Rp 150.000</div>
+                        </div>
+                        <div className="list-item">
+                            <div className="list-info">
+                                <p>Listrik Pos Ronda</p>
+                                <span>12 Feb 2026</span>
+                            </div>
+                            <div className="nominal-out">- Rp 35.000</div>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const InputDawis = () => (
+                <div>
+                    <div className="header" style={{display: 'flex', alignItems: 'center'}}>
+                        <button className="btn-back" onClick={() => setPage('dashboard')}>←</button>
+                        <h1>Input Setoran</h1>
+                    </div>
+                    <div className="container">
+                        <div style={{background: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #ddd'}}>
+                            <label style={{fontSize: '10px', fontWeight: 'bold', color: '#888'}}>NAMA WARGA</label>
+                            <select style={{width: '100%', padding: '12px', marginTop: '5px', marginBottom: '15px', borderRadius: '8px', border: '1px solid #ddd'}}>
+                                <option>Bp. Ahmad Sujadi</option>
+                                <option>Bp. Bambang Heru</option>
+                            </select>
+                            
+                            <label style={{fontSize: '10px', fontWeight: 'bold', color: '#888'}}>NOMINAL (RP)</label>
+                            <input type="number" placeholder="0" style={{width: '100%', padding: '12px', marginTop: '5px', marginBottom: '20px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '18px', fontWeight: 'bold'}} />
+                            
+                            <button onClick={() => {alert('Berhasil!'); setPage('dashboard');}} style={{width: '100%', padding: '15px', background: '#0052cc', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px'}}>KIRIM SETORAN</button>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            if (page === 'laporan') return <Laporan />;
+            if (page === 'dawis') return <InputDawis />;
+            return <Dashboard />;
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
