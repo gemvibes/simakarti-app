@@ -1,67 +1,44 @@
-import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-// Import Halaman dari folder pages
-// Pastikan nama file di GitHub: Dashboard.js, DataWarga.js, InputData.js
+import React, { useState } from 'react';
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import DataWarga from './pages/DataWarga';
 import InputData from './pages/InputData';
 
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [activePage, setActivePage] = useState('dashboard');
-  const [user, setUser] = useState('');
-  const [pass, setPass] = useState('');
+  const [user, setUser] = useState(null); // Menyimpan info login {role, name}
+  const [currentPage, setCurrentPage] = useState('dashboard');
 
-  const handleLogin = (e) => {
-    e.preventDefault();
-    if (user === 'admin' && pass === 'rt03') {
-      setIsLoggedIn(true);
-    } else {
-      alert('Login Gagal!');
-    }
-  };
-
-  if (!isLoggedIn) {
-    return (
-      <div style={{ padding: '50px', textAlign: 'center', fontFamily: 'sans-serif' }}>
-        <h1>SIMAKARTI</h1>
-        <p>Sistem Informasi Manajemen Kas RT Tiga</p>
-        <form onSubmit={handleLogin} style={{ display: 'inline-block', textAlign: 'left', padding: '20px', border: '1px solid #ccc', borderRadius: '10px' }}>
-          <label>Username</label><br/>
-          <input type="text" value={user} onChange={(e) => setUser(e.target.value)} style={{ width: '100%', marginBottom: '10px' }} /><br/>
-          <label>Password</label><br/>
-          <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} style={{ width: '100%', marginBottom: '20px' }} /><br/>
-          <button type="submit" style={{ width: '100%', padding: '10px', background: '#2c3e50', color: 'white' }}>LOGIN</button>
-        </form>
-      </div>
-    );
+  if (!user) {
+    return <Login onLogin={setUser} />;
   }
 
   return (
-    <div style={{ fontFamily: 'sans-serif', maxWidth: '600px', margin: '0 auto' }}>
-      <header style={{ textAlign: 'center', padding: '20px', borderBottom: '2px solid #eee' }}>
-        <h1 style={{ margin: 0 }}>SIMAKARTI</h1>
-        <p style={{ margin: 0, fontSize: '12px', fontWeight: 'bold' }}>Sistem Informasi Manajemen Kas RT Tiga</p>
+    <div style={{ fontFamily: 'sans-serif', maxWidth: '600px', margin: '0 auto', minHeight: '100vh', backgroundColor: '#fff' }}>
+      <header style={{ padding: '20px', textAlign: 'center', borderBottom: '2px solid #eee' }}>
+        <h1 style={{ margin: 0, color: '#2c3e50' }}>SIMAKARTI</h1>
+        <p style={{ margin: 0, fontSize: '11px', fontWeight: 'bold' }}>SISTEM INFORMASI MANAJEMEN KAS RT TIGA</p>
+        <p style={{ fontSize: '12px', color: '#3498db' }}>Login Sebagai: {user.role.toUpperCase()}</p>
       </header>
 
-      <nav style={{ display: 'flex', background: '#2c3e50', color: 'white' }}>
-        <button onClick={() => setActivePage('dashboard')} style={{ flex: 1, padding: '15px', background: activePage === 'dashboard' ? '#34495e' : 'none', color: 'white', border: 'none' }}>Dashboard</button>
-        <button onClick={() => setActivePage('warga')} style={{ flex: 1, padding: '15px', background: activePage === 'warga' ? '#34495e' : 'none', color: 'white', border: 'none' }}>Warga</button>
-        <button onClick={() => setActivePage('input')} style={{ flex: 1, padding: '15px', background: activePage === 'input' ? '#34495e' : 'none', color: 'white', border: 'none' }}>Input</button>
+      <nav style={{ display: 'flex', background: '#2c3e50', padding: '5px' }}>
+        <button onClick={() => setCurrentPage('dashboard')} style={navBtn}>Dashboard</button>
+        <button onClick={() => setCurrentPage('warga')} style={navBtn}>Warga</button>
+        {/* Hanya Admin/Bendahara/Sekretaris/Dawis yang bisa input */}
+        {['ketua', 'bendahara', 'sekretaris', 'dawis'].includes(user.role) && (
+          <button onClick={() => setCurrentPage('input')} style={navBtn}>Input</button>
+        )}
+        <button onClick={() => setUser(null)} style={{ ...navBtn, background: '#e74c3c' }}>Keluar</button>
       </nav>
 
       <main style={{ padding: '20px' }}>
-        {activePage === 'dashboard' && <Dashboard supabase={supabase} />}
-        {activePage === 'warga' && <DataWarga supabase={supabase} />}
-        {activePage === 'input' && <InputData supabase={supabase} />}
+        {currentPage === 'dashboard' && <Dashboard role={user.role} />}
+        {currentPage === 'warga' && <DataWarga role={user.role} />}
+        {currentPage === 'input' && <InputData role={user.role} />}
       </main>
     </div>
   );
 }
+
+const navBtn = { flex: 1, padding: '10px', background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '12px' };
 
 export default App;
