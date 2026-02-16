@@ -1,6 +1,6 @@
 {
   "name": "simakarti-app",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
@@ -10,13 +10,21 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build"
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
   },
   "browserslist": {
     "production": [
       ">0.2%",
       "not dead",
-      "op_mini all"
+      "not op_mini all"
     ],
     "development": [
       "last 1 chrome version",
