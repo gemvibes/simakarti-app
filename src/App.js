@@ -1,118 +1,236 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Konfigurasi Supabase
+// 1. KONFIGURASI SUPABASE
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 function App() {
+  // --- STATE MANAGEMENT ---
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
+  
   const [warga, setWarga] = useState([]);
+  const [kas, setKas] = useState([]);
   const [saldo, setSaldo] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Login: admin / rt03
+  // STATE FORM INPUT
+  const [formDataWarga, setFormDataWarga] = useState({ nama_lengkap: '', no_hp: '', status_rumah: 'Tetap' });
+  const [formDataKas, setFormDataKas] = useState({ nominal: '', jenis_transaksi: 'Pemasukan', keterangan: '' });
+
+  // --- LOGIKA LOGIN ---
   const handleLogin = (e) => {
     e.preventDefault();
     if (user === 'admin' && pass === 'rt03') {
       setIsLoggedIn(true);
-      fetchData();
+      fetchAllData();
     } else {
-      alert('Username atau Password salah!');
+      alert('Akses Ditolak! Username/Password Salah.');
     }
   };
 
-  async function fetchData() {
+  // --- AMBIL DATA DARI DATABASE ---
+  const fetchAllData = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Ambil data warga
-      const { data: dWarga } = await supabase.from('warga').select('*');
-      
-      // Ambil data kas - Menggunakan kolom 'jenis_transaksi' sesuai SQL kamu
-      const { data: dKas, error: eKas } = await supabase.from('transaksi_kas').select('*');
+      // Ambil Warga
+      const { data: dWarga } = await supabase.from('warga').select('*').order('nama_lengkap', { ascending: true });
+      // Ambil Kas
+      const { data: dKas, error: eKas } = await supabase.from('transaksi_kas').select('*').order('tanggal', { ascending: false });
       
       if (eKas) throw eKas;
 
+      // Hitung Saldo
       let total = 0;
       dKas?.forEach(t => {
-        // Cek kolom 'jenis_transaksi' (sesuai SQL) atau 'jenis' (cadangan)
-        const tipe = t.jenis_transaksi || t.jenis; 
-        if (tipe === 'Pemasukan') total += t.nominal;
-        else if (tipe === 'Pengeluaran') total -= t.nominal;
+        const tipe = t.jenis_transaksi || t.jenis;
+        if (tipe === 'Pemasukan') total += Number(t.nominal);
+        else total -= Number(t.nominal);
       });
 
       setWarga(dWarga || []);
+      setKas(dKas || []);
       setSaldo(total);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  // TAMPILAN LOGIN
+  // --- FUNGSI SIMPAN DATA ---
+  const handleAddWarga = async (e) => {
+    e.preventDefault();
+    const { error } = await supabase.from('warga').insert([formDataWarga]);
+    if (error) alert("Gagal simpan warga: " + error.message);
+    else {
+      alert('Warga berhasil ditambahkan!');
+      setFormDataWarga({ nama_lengkap: '', no_hp: '', status_rumah: 'Tetap' });
+      fetchAllData();
+    }
+  };
+
+  const handleAddKas = async (e) => {
+    e.preventDefault();
+    const { error } = await supabase.from('transaksi_kas').insert([{
+      nominal: Number(formDataKas.nominal),
+      jenis_transaksi: formDataKas.jenis_transaksi,
+      keterangan: formDataKas.keterangan,
+      tanggal: new Date().toISOString()
+    }]);
+    if (error) alert("Gagal simpan transaksi: " + error.message);
+    else {
+      alert('Transaksi Kas berhasil dicatat!');
+      setFormDataKas({ nominal: '', jenis_transaksi: 'Pemasukan', keterangan: '' });
+      fetchAllData();
+      setActiveTab('dashboard'); // Kembali ke dashboard untuk lihat saldo baru
+    }
+  };
+
+  // --- KOMPONEN UI ---
+  const HeaderLogo = () => (
+    <div style={{ textAlign: 'center', marginBottom: '20px', padding: '10px' }}>
+      <h1 style={{ margin: 0, color: '#2c3e50', letterSpacing: '2px', fontSize: '28px' }}>SIMAKARTI</h1>
+      <p style={{ margin: 0, fontSize: '11px', color: '#34495e', fontWeight: 'bold', textTransform: 'uppercase' }}>
+        Sistem Informasi Manajemen Kas RT Tiga
+      </p>
+    </div>
+  );
+
+  // TAMPILAN JIKA BELUM LOGIN
   if (!isLoggedIn) {
     return (
-      <div style={{ padding: '50px 20px', textAlign: 'center', fontFamily: 'sans-serif', minHeight: '100vh', backgroundColor: '#f0f2f5' }}>
-        <div style={{ display: 'inline-block', width: '100%', maxWidth: '350px', backgroundColor: 'white', padding: '30px', borderRadius: '15px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
-          <h2 style={{ color: '#2c3e50', marginBottom: '20px' }}>🔐 SIMAKARTI RT03</h2>
+      <div style={{ padding: '60px 20px', textAlign: 'center', fontFamily: 'sans-serif', backgroundColor: '#f0f2f5', minHeight: '100vh' }}>
+        <HeaderLogo />
+        <div style={{ display: 'inline-block', width: '100%', maxWidth: '350px', backgroundColor: 'white', padding: '30px', borderRadius: '15px', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+          <h3 style={{ marginBottom: '25px', color: '#2c3e50' }}>Portal Superadmin</h3>
           <form onSubmit={handleLogin} style={{ textAlign: 'left' }}>
             <div style={{ marginBottom: '15px' }}>
-              <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Username</label>
-              <input type="text" value={user} onChange={(e) => setUser(e.target.value)} placeholder="Masukkan username" style={{ width: '100%', padding: '12px', marginTop: '5px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }} />
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Username</label>
+              <input type="text" value={user} onChange={(e) => setUser(e.target.value)} style={{ width: '100%', padding: '12px', marginTop: '5px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }} placeholder="admin" />
             </div>
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Password</label>
-              <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Masukkan password" style={{ width: '100%', padding: '12px', marginTop: '5px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }} />
+            <div style={{ marginBottom: '25px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Password</label>
+              <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} style={{ width: '100%', padding: '12px', marginTop: '5px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }} placeholder="••••••" />
             </div>
-            <button type="submit" style={{ width: '100%', padding: '12px', background: '#3498db', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>LOGIN</button>
+            <button type="submit" style={{ width: '100%', padding: '12px', background: '#2c3e50', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>MASUK KE SISTEM</button>
           </form>
         </div>
       </div>
     );
   }
 
-  // TAMPILAN DASHBOARD
+  // TAMPILAN DASHBOARD UTAMA
   return (
-    <div style={{ fontFamily: 'sans-serif', maxWidth: '600px', margin: '0 auto', padding: '20px', backgroundColor: '#fff', minHeight: '100vh' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <div>
-          <h1 style={{ color: '#2c3e50', margin: '0', fontSize: '24px' }}>SIMAKARTI</h1>
-          <p style={{ color: '#7f8c8d', margin: '0', fontSize: '12px' }}>Manajemen RT 03</p>
-        </div>
-        <button onClick={() => setIsLoggedIn(false)} style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', fontSize: '12px' }}>Logout</button>
+    <div style={{ fontFamily: 'sans-serif', maxWidth: '500px', margin: '0 auto', minHeight: '100vh', backgroundColor: '#fff', borderLeft: '1px solid #eee', borderRight: '1px solid #eee' }}>
+      <header style={{ padding: '20px', borderBottom: '1px solid #eee', position: 'relative' }}>
+        <HeaderLogo />
+        <button onClick={() => setIsLoggedIn(false)} style={{ position: 'absolute', top: '20px', right: '20px', background: '#ff4757', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '5px', fontSize: '10px', cursor: 'pointer' }}>LOGOUT</button>
       </header>
 
-      <div style={{ backgroundColor: '#2980b9', color: 'white', padding: '25px', borderRadius: '15px', textAlign: 'center', marginBottom: '25px', boxShadow: '0 4px 15px rgba(41, 128, 185, 0.3)' }}>
-        <p style={{ margin: '0', opacity: 0.8, fontSize: '14px' }}>Total Kas RT</p>
-        <h2 style={{ margin: '5px 0 0 0', fontSize: '36px' }}>Rp {saldo.toLocaleString('id-ID')}</h2>
-      </div>
+      {/* NAVIGASI BAWAH (STICKY) */}
+      <nav style={{ display: 'flex', background: '#2c3e50', padding: '5px', position: 'sticky', top: 0, zIndex: 100 }}>
+        <button onClick={() => setActiveTab('dashboard')} style={{ flex: 1, padding: '12px', border: 'none', background: activeTab === 'dashboard' ? '#34495e' : 'transparent', color: 'white', cursor: 'pointer', fontSize: '12px' }}>📊 KAS</button>
+        <button onClick={() => setActiveTab('warga')} style={{ flex: 1, padding: '12px', border: 'none', background: activeTab === 'warga' ? '#34495e' : 'transparent', color: 'white', cursor: 'pointer', fontSize: '12px' }}>👥 WARGA</button>
+        <button onClick={() => setActiveTab('input')} style={{ flex: 1, padding: '12px', border: 'none', background: activeTab === 'input' ? '#34495e' : 'transparent', color: 'white', cursor: 'pointer', fontSize: '12px' }}>➕ INPUT</button>
+      </nav>
 
-      {error && <div style={{ backgroundColor: '#fee2e2', color: '#dc2626', padding: '15px', borderRadius: '10px', marginBottom: '20px', fontSize: '14px', border: '1px solid #fca5a5' }}>⚠️ <b>Database Error:</b> {error}</div>}
+      <main style={{ padding: '20px' }}>
+        {error && <div style={{ background: '#ffcccc', color: 'red', padding: '10px', borderRadius: '5px', marginBottom: '15px', fontSize: '12px' }}>Error: {error}</div>}
 
-      <div>
-        <h3 style={{ borderBottom: '2px solid #f0f2f5', paddingBottom: '10px', color: '#2c3e50' }}>👥 Daftar Warga ({warga.length})</h3>
-        {loading ? <p style={{ textAlign: 'center', color: '#7f8c8d' }}>Mengambil data...</p> : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {warga.length === 0 ? <p style={{ textAlign: 'center', color: '#bdc3c7', fontStyle: 'italic' }}>Belum ada data warga.</p> : 
-              warga.map((orang) => (
-                <div key={orang.id} style={{ border: '1px solid #f0f2f5', padding: '15px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                  <div>
-                    <div style={{ fontWeight: 'bold', color: '#2c3e50' }}>{orang.nama_lengkap}</div>
-                    <div style={{ fontSize: '12px', color: '#95a5a6' }}>{orang.no_hp || 'No HP Belum Ada'}</div>
-                  </div>
-                  <div style={{ fontSize: '11px', background: '#ecf0f1', padding: '4px 8px', borderRadius: '4px', color: '#7f8c8d' }}>{orang.status_rumah}</div>
+        {/* HALAMAN 1: DASHBOARD KAS */}
+        {activeTab === 'dashboard' && (
+          <div>
+            <div style={{ background: 'linear-gradient(135deg, #1e3799, #4a69bd)', color: 'white', padding: '30px', borderRadius: '20px', textAlign: 'center', marginBottom: '25px', boxShadow: '0 10px 20px rgba(30,55,153,0.2)' }}>
+              <p style={{ margin: 0, opacity: 0.8, fontSize: '14px' }}>Total Saldo Kas RT 03</p>
+              <h1 style={{ margin: '10px 0', fontSize: '36px' }}>Rp {saldo.toLocaleString('id-ID')}</h1>
+            </div>
+            <h3 style={{ color: '#2c3e50', borderLeft: '4px solid #1e3799', paddingLeft: '10px' }}>Riwayat Transaksi</h3>
+            {loading ? <p>Memuat data...</p> : kas.map(k => (
+              <div key={k.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '15px 0', borderBottom: '1px solid #f1f1f1', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#2c3e50' }}>{k.keterangan || 'Tanpa Keterangan'}</div>
+                  <div style={{ fontSize: '11px', color: '#95a5a6' }}>{new Date(k.tanggal).toLocaleDateString('id-ID')}</div>
                 </div>
-              ))
-            }
+                <div style={{ fontWeight: 'bold', color: (k.jenis_transaksi || k.jenis) === 'Pemasukan' ? '#2ecc71' : '#e74c3c' }}>
+                  {(k.jenis_transaksi || k.jenis) === 'Pemasukan' ? '+' : '-'} {Number(k.nominal).toLocaleString('id-ID')}
+                </div>
+              </div>
+            ))}
           </div>
         )}
-      </div>
+
+        {/* HALAMAN 2: DATA WARGA */}
+        {activeTab === 'warga' && (
+          <div>
+            <h3 style={{ color: '#2c3e50', borderLeft: '4px solid #1e3799', paddingLeft: '10px' }}>Daftar Warga RT 03</h3>
+            <p style={{ fontSize: '12px', color: '#7f8c8d', marginBottom: '20px' }}>Total: {warga.length} Kepala Keluarga/Warga</p>
+            {warga.map(w => (
+              <div key={w.id} style={{ padding: '15px', border: '1px solid #eee', borderRadius: '12px', marginBottom: '10px', background: '#fcfcfc' }}>
+                <div style={{ fontWeight: 'bold', color: '#2c3e50' }}>{w.nama_lengkap}</div>
+                <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '5px' }}>📞 {w.no_hp || '-'} | 🏠 {w.status_rumah}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* HALAMAN 3: INPUT DATA */}
+        {activeTab === 'input' && (
+          <div>
+            <h3 style={{ color: '#2c3e50', borderLeft: '4px solid #1e3799', paddingLeft: '10px' }}>Input Data Baru</h3>
+            
+            {/* Form Input Kas */}
+            <div style={{ background: '#f8f9fa', padding: '20px', borderRadius: '15px', marginBottom: '30px', border: '1px solid #e9ecef' }}>
+              <h4 style={{ marginTop: 0 }}>💰 Catat Transaksi Kas</h4>
+              <form onSubmit={handleAddKas}>
+                <label style={{ fontSize: '12px' }}>Keterangan</label>
+                <input type="text" required value={formDataKas.keterangan} onChange={(e) => setFormDataKas({...formDataKas, keterangan: e.target.value})} style={{ width: '100%', padding: '10px', margin: '5px 0 15px 0', boxSizing: 'border-box' }} placeholder="Contoh: Iuran Sampah Jan" />
+                
+                <label style={{ fontSize: '12px' }}>Nominal (Rupiah)</label>
+                <input type="number" required value={formDataKas.nominal} onChange={(e) => setFormDataKas({...formDataKas, nominal: e.target.value})} style={{ width: '100%', padding: '10px', margin: '5px 0 15px 0', boxSizing: 'border-box' }} placeholder="50000" />
+                
+                <label style={{ fontSize: '12px' }}>Jenis Transaksi</label>
+                <select value={formDataKas.jenis_transaksi} onChange={(e) => setFormDataKas({...formDataKas, jenis_transaksi: e.target.value})} style={{ width: '100%', padding: '10px', margin: '5px 0 20px 0' }}>
+                  <option value="Pemasukan">Pemasukan (Uang Masuk)</option>
+                  <option value="Pengeluaran">Pengeluaran (Uang Keluar)</option>
+                </select>
+                
+                <button type="submit" style={{ width: '100%', padding: '12px', background: '#1e3799', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>SIMPAN TRANSAKSI</button>
+              </form>
+            </div>
+
+            {/* Form Input Warga */}
+            <div style={{ background: '#ffffff', padding: '20px', borderRadius: '15px', border: '1px solid #eee' }}>
+              <h4 style={{ marginTop: 0 }}>👥 Tambah Warga Baru</h4>
+              <form onSubmit={handleAddWarga}>
+                <label style={{ fontSize: '12px' }}>Nama Lengkap</label>
+                <input type="text" required value={formDataWarga.nama_lengkap} onChange={(e) => setFormDataWarga({...formDataWarga, nama_lengkap: e.target.value})} style={{ width: '100%', padding: '10px', margin: '5px 0 15px 0', boxSizing: 'border-box' }} />
+                
+                <label style={{ fontSize: '12px' }}>Nomor HP</label>
+                <input type="text" value={formDataWarga.no_hp} onChange={(e) => setFormDataWarga({...formDataWarga, no_hp: e.target.value})} style={{ width: '100%', padding: '10px', margin: '5px 0 15px 0', boxSizing: 'border-box' }} />
+                
+                <label style={{ fontSize: '12px' }}>Status Rumah</label>
+                <select value={formDataWarga.status_rumah} onChange={(e) => setFormDataWarga({...formDataWarga, status_rumah: e.target.value})} style={{ width: '100%', padding: '10px', margin: '5px 0 20px 0' }}>
+                  <option value="Tetap">Tetap</option>
+                  <option value="Kontrak">Kontrak</option>
+                </select>
+                
+                <button type="submit" style={{ width: '100%', padding: '12px', background: '#2ecc71', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>SIMPAN DATA WARGA</button>
+              </form>
+            </div>
+          </div>
+        )}
+      </main>
+
+      <footer style={{ padding: '30px 20px', textAlign: 'center', fontSize: '11px', color: '#bdc3c7' }}>
+        <p>© 2024 SIMAKARTI App - Sistem Informasi Manajemen Kas RT Tiga</p>
+      </footer>
     </div>
   );
 }
