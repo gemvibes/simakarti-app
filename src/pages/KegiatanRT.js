@@ -2,92 +2,120 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 const KegiatanRT = ({ role }) => {
-  const [listK, setListK] = useState([]);
+  const [warga, setWarga] = useState([]);
+  const [pertemuan, setPertemuan] = useState([]);
+  const [selectedWarga, setSelectedWarga] = useState([]);
+  const [form, setForm] = useState({ tanggal: '', lokasi: '', judul: '', notulen: '' });
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ judul_acara: '', isi_notulen: '', jumlah_hadir: '' });
 
-  // Ambil Data Kegiatan
-  const fetchKegiatan = async () => {
-    const { data, error } = await supabase
-      .from('kegiatan_rt')
-      .select('*')
-      .order('tanggal', { ascending: false });
-    if (!error) setListK(data || []);
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    // Ambil Data Warga untuk Absen
+    const { data: dataWarga } = await supabase.from('warga').select('*').order('nama_lengkap', { ascending: true });
+    setWarga(dataWarga || []);
+
+    // Ambil Riwayat Pertemuan & Rekap Absensi
+    const { data: dataPertemuan } = await supabase.from('pertemuan').select(`
+      *,
+      absensi (warga_id)
+    `).order('tanggal', { ascending: false });
+    setPertemuan(dataPertemuan || []);
   };
 
-  useEffect(() => { fetchKegiatan(); }, []);
+  const handleCheck = (id) => {
+    setSelectedWarga(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  };
 
-  // Simpan Kegiatan (Khusus Sekretaris)
-  const handleSubmit = async (e) => {
+  const simpanPertemuan = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.from('kegiatan_rt').insert([form]);
-    if (error) {
-      alert('Gagal: ' + error.message);
-    } else {
-      alert('Notulen & Absensi Berhasil Disimpan!');
-      setForm({ judul_acara: '', isi_notulen: '', jumlah_hadir: '' });
-      fetchKegiatan();
+    
+    // 1. Simpan Data Pertemuan
+    const { data: newPertemuan, error: pError } = await supabase
+      .from('pertemuan')
+      .insert([{ tanggal: form.tanggal, lokasi: form.lokasi, judul_acara: form.judul, notulen: form.notulen }])
+      .select();
+
+    if (!pError && selectedWarga.length > 0) {
+      // 2. Simpan Data Absensi
+      const absensiData = selectedWarga.map(wId => ({
+        pertemuan_id: newPertemuan[0].id,
+        warga_id: wId
+      }));
+      await supabase.from('absensi').insert(absensiData);
+      
+      alert("Pertemuan & Absensi Berhasil Disimpan!");
+      setForm({ tanggal: '', lokasi: '', judul: '', notulen: '' });
+      setSelectedWarga([]);
+      fetchData();
     }
     setLoading(false);
+  };
+
+  // Hitung Rekap Tahunan (Berapa kali hadir)
+  const hitungKehadiran = (wId) => {
+    return pertemuan.filter(p => p.absensi.some(a => a.warga_id === wId)).length;
   };
 
   const isSekretaris = role === 'sekretaris' || role === 'ketua';
 
   return (
-    <div style={{ fontFamily: 'sans-serif' }}>
-      <h3 style={{ borderLeft: '4px solid #9b59b6', paddingLeft: '10px' }}>Agenda & Kegiatan RT</h3>
+    <div>
+      <h3>📋 Manajemen Pertemuan & Absensi</h3>
 
-      {/* INPUT ABSENSI & NOTULEN (Hanya Sekretaris & Ketua) */}
       {isSekretaris && (
-        <div style={cardForm}>
-          <h4 style={{ marginTop: 0, color: '#8e44ad' }}>📝 Input Notulen & Absensi</h4>
-          <form onSubmit={handleSubmit}>
-            <input 
-              type="text" placeholder="Judul Acara / Pertemuan" required style={inS}
-              value={form.judul_acara} onChange={e => setForm({...form, judul_acara: e.target.value})}
-            />
-            <textarea 
-              placeholder="Isi Notulen / Hasil Rapat..." required style={{...inS, height: '80px'}}
-              value={form.isi_notulen} onChange={e => setForm({...form, isi_notulen: e.target.value})}
-            />
-            <input 
-              type="number" placeholder="Jumlah Warga Hadir" required style={inS}
-              value={form.jumlah_hadir} onChange={e => setForm({...form, jumlah_hadir: e.target.value})}
-            />
-            <button type="submit" disabled={loading} style={btS}>
-              {loading ? 'Menyimpan...' : 'SIMPAN KEGIATAN'}
-            </button>
+        <div style={cardStyle}>
+          <h4>Input Pertemuan Baru</h4>
+          <form onSubmit={simpanPertemuan}>
+            <input type="date" required style={inputS} value={form.tanggal} onChange={e => setForm({...form, tanggal:e.target.value})} />
+            <input type="text" placeholder="Lokasi (Contoh: Rumah Bu Pardi)" required style={inputS} value={form.lokasi} onChange={e => setForm({...form, lokasi:e.target.value})} />
+            <input type="text" placeholder="Judul Pertemuan" required style={inputS} value={form.judul} onChange={e => setForm({...form, judul:e.target.value})} />
+            <textarea placeholder="Notulen Hasil Rapat" style={inputS} value={form.notulen} onChange={e => setForm({...form, notulen:e.target.value})} />
+            
+            <p><strong>Checklist Kehadiran Warga:</strong></p>
+            <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #ddd', padding: '10px', borderRadius: '5px' }}>
+              {warga.map(w => (
+                <div key={w.id} style={{ marginBottom: '5px' }}>
+                  <input type="checkbox" checked={selectedWarga.includes(w.id)} onChange={() => handleCheck(w.id)} /> {w.nama_lengkap} <small>({w.dawis})</small>
+                </div>
+              ))}
+            </div>
+            <button type="submit" style={btnS} disabled={loading}>{loading ? 'Menyimpan...' : 'Simpan Pertemuan & Absen'}</button>
           </form>
         </div>
       )}
 
-      {/* DAFTAR RIWAYAT KEGIATAN (Semua Bisa Lihat) */}
-      <h4 style={{ marginTop: '25px' }}>Riwayat Pertemuan</h4>
-      {listK.length === 0 && <p style={{ color: '#999', fontStyle: 'italic' }}>Belum ada data kegiatan.</p>}
-      
-      {listK.map((k) => (
-        <div key={k.id} style={itemCard}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-            <strong style={{ color: '#2c3e50' }}>{k.judul_acara}</strong>
-            <span style={{ fontSize: '11px', background: '#ecf0f1', padding: '2px 6px', borderRadius: '4px' }}>
-              {new Date(k.created_at).toLocaleDateString('id-ID')}
-            </span>
-          </div>
-          <p style={{ fontSize: '13px', color: '#555', margin: '5px 0', whiteSpace: 'pre-wrap' }}>{k.isi_notulen}</p>
-          <div style={{ fontSize: '11px', color: '#8e44ad', fontWeight: 'bold' }}>
-            👥 Kehadiran: {k.jumlah_hadir} Orang
-          </div>
-        </div>
-      ))}
+      <h4>📊 Rekap Kehadiran Tahunan</h4>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+          <thead>
+            <tr style={{ background: '#2c3e50', color: 'white' }}>
+              <th style={tdS}>Nama Warga</th>
+              <th style={tdS}>Dawis</th>
+              <th style={tdS}>Total Hadir</th>
+            </tr>
+          </thead>
+          <tbody>
+            {warga.map(w => (
+              <tr key={w.id} style={{ borderBottom: '1px solid #eee' }}>
+                <td style={tdS}>{w.nama_lengkap}</td>
+                <td style={tdS}>{w.dawis}</td>
+                <td style={{ ...tdS, fontWeight: 'bold', color: '#27ae60' }}>{hitungKehadiran(w.id)} x</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };
 
-// Styling
-const cardForm = { background: '#f5eef8', padding: '15px', borderRadius: '10px', border: '1px solid #d2b4de', marginBottom: '20px' };
-const inS = { width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '6px', border: '1px solid #ddd', boxSizing: 'border-box', fontFamily: 'inherit' };
-const btS = { width: '100%', padding: '10px', background: '#8e44ad', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
-const itemCard = { background: 'white', padding: '15px', borderRadius: '8px', borderBottom: '1px solid #eee', marginBottom: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' };
+const cardStyle = { background: '#fff', padding: '15px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' };
+const inputS = { width: '100%', padding: '8px', marginBottom: '10px', borderRadius: '4px', border: '1px solid #ccc' };
+const btnS = { width: '100%', padding: '10px', background: '#27ae60', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold', marginTop: '10px' };
+const tdS = { padding: '8px', border: '1px solid #ddd' };
 
 export default KegiatanRT;
