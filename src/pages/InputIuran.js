@@ -3,123 +3,177 @@ import { supabase } from '../lib/supabaseClient';
 
 const InputIuran = ({ user }) => {
   const [wargaList, setWargaList] = useState([]);
-  const [selectedWarga, setSelectedWarga] = useState('');
-  const [form, setForm] = useState({ tipe_kas: 'RT', jumlah: '', keterangan: '' });
+  const [iuranData, setIuranData] = useState({}); // Menyimpan input angka per warga
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
 
-  // Fungsi untuk mengubah angka biasa ke Romawi sesuai pola database Anda
   const toRomawi = (num) => {
     const romawi = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI' };
     return romawi[num] || num;
   };
 
-  const roleNumber = user.role.replace('dawis', ''); 
-  const dawisDbPattern = `DAWIS ${toRomawi(roleNumber)}`; // Menghasilkan "DAWIS III"
+  const roleNumber = user.role.replace('dawis', '');
+  const dawisLabel = `DAWIS ${toRomawi(roleNumber)}`;
 
   useEffect(() => {
-    fetchWargaByDawis();
+    fetchWarga();
   }, [user.role]);
 
-  const fetchWargaByDawis = async () => {
+  const fetchWarga = async () => {
     setFetching(true);
-    // Mencari warga yang kolom dawis-nya tepat sama dengan "DAWIS III"
     const { data, error } = await supabase
       .from('warga')
-      .select('id, nama_lengkap, dawis')
-      .eq('dawis', dawisDbPattern) 
+      .select('id, nama_lengkap')
+      .eq('dawis', dawisLabel)
       .order('nama_lengkap', { ascending: true });
 
-    if (error) {
-      console.error("Error fetch warga:", error);
-    } else {
-      setWargaList(data || []);
+    if (!error && data) {
+      setWargaList(data);
+      // Inisialisasi object input kosong untuk setiap warga
+      const initialInput = {};
+      data.forEach(w => {
+        initialInput[w.id] = { rt: '', kgr: '' };
+      });
+      setIuranData(initialInput);
     }
     setFetching(false);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!selectedWarga) return alert("Pilih nama warga terlebih dahulu!");
-    
-    setLoading(true);
-    const wargaObj = wargaList.find(w => w.id === selectedWarga);
-    const namaWarga = wargaObj?.nama_lengkap;
+  const handleInputChange = (id, field, value) => {
+    setIuranData(prev => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: value }
+    }));
+  };
 
-    const { error } = await supabase.from('mutasi_kas').insert([
-      {
-        tipe_kas: form.tipe_kas,
-        jenis: 'Masuk',
-        jumlah: parseFloat(form.jumlah),
-        keterangan: `Iuran ${form.tipe_kas} - ${namaWarga} (via ${user.username})`,
-        warga_id: selectedWarga,
-        pj: user.username
+  const handleSubmitBatch = async () => {
+    const payloads = [];
+    
+    // Scan semua input yang ada isinya
+    Object.keys(iuranData).forEach(wargaId => {
+      const { rt, kgr } = iuranData[wargaId];
+      const namaWarga = wargaList.find(w => w.id === wargaId)?.nama_lengkap;
+
+      if (rt && parseFloat(rt) > 0) {
+        payloads.push({
+          tipe_kas: 'RT',
+          jenis: 'Masuk',
+          jumlah: parseFloat(rt),
+          keterangan: `Iuran RT - ${namaWarga} (via ${user.username})`,
+          warga_id: wargaId,
+          pj: user.username
+        });
       }
-    ]);
+      if (kgr && parseFloat(kgr) > 0) {
+        payloads.push({
+          tipe_kas: 'KGR',
+          jenis: 'Masuk',
+          jumlah: parseFloat(kgr),
+          keterangan: `Iuran KGR - ${namaWarga} (via ${user.username})`,
+          warga_id: wargaId,
+          pj: user.username
+        });
+      }
+    });
+
+    if (payloads.length === 0) return alert("Belum ada angka yang diisi!");
+
+    setLoading(true);
+    const { error } = await supabase.from('mutasi_kas').insert(payloads);
 
     if (!error) {
-      alert(`Berhasil! Iuran ${namaWarga} masuk ke Kas ${form.tipe_kas}`);
-      setForm({ ...form, jumlah: '', keterangan: '' });
-      setSelectedWarga('');
+      alert("✅ Alhamdulillah, semua iuran berhasil disimpan!");
+      fetchWarga(); // Reset form
     } else {
-      alert("Gagal menyimpan: " + error.message);
+      alert("Terjadi kesalahan: " + error.message);
     }
     setLoading(false);
   };
 
+  if (fetching) return <div style={{ padding: '20px', textAlign: 'center' }}>Memuat Buku Iuran...</div>;
+
   return (
-    <div style={{ maxWidth: '500px', margin: '0 auto', background: 'white', padding: '25px', borderRadius: '15px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}>
-      <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-        <span style={{ fontSize: '40px' }}>📥</span>
-        <h3 style={{ margin: '10px 0 5px 0', color: '#2c3e50' }}>Setoran Iuran {user.username.toUpperCase()}</h3>
-        <p style={{ margin: 0, fontSize: '13px', color: '#95a5a6' }}>Wilayah: {dawisDbPattern}</p>
+    <div style={{ maxWidth: '600px', margin: '0 auto', background: '#fff', borderRadius: '15px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+      {/* Header Ala Buku Absen */}
+      <div style={{ background: '#27ae60', color: 'white', padding: '20px', textAlign: 'center' }}>
+        <h3 style={{ margin: 0 }}>Buku Iuran {dawisLabel}</h3>
+        <p style={{ margin: '5px 0 0 0', fontSize: '12px', opacity: 0.9 }}>Masukkan nilai uang pada kolom RT/KGR di samping nama warga</p>
       </div>
-      
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        <div>
-          <label style={labelS}>Pilih Nama Warga</label>
-          <select style={inputS} value={selectedWarga} onChange={e => setSelectedWarga(e.target.value)} required>
-            <option value="">-- {fetching ? 'Memuat Nama...' : 'Pilih Nama Anggota'} --</option>
-            {wargaList.map(w => (
-              <option key={w.id} value={w.id}>{w.nama_lengkap}</option>
+
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #dee2e6' }}>
+              <th style={thS}>Nama Warga</th>
+              <th style={{ ...thS, width: '90px' }}>Iuran RT</th>
+              <th style={{ ...thS, width: '90px' }}>KGR</th>
+            </tr>
+          </thead>
+          <tbody>
+            {wargaList.map((w) => (
+              <tr key={w.id} style={{ borderBottom: '1px solid #eee' }}>
+                <td style={tdS}>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{w.nama_lengkap}</div>
+                </td>
+                <td style={tdS}>
+                  <input 
+                    type="number" 
+                    placeholder="0"
+                    style={inputTableS}
+                    value={iuranData[w.id]?.rt || ''}
+                    onChange={(e) => handleInputChange(w.id, 'rt', e.target.value)}
+                  />
+                </td>
+                <td style={tdS}>
+                  <input 
+                    type="number" 
+                    placeholder="0"
+                    style={inputTableS}
+                    value={iuranData[w.id]?.kgr || ''}
+                    onChange={(e) => handleInputChange(w.id, 'kgr', e.target.value)}
+                  />
+                </td>
+              </tr>
             ))}
-          </select>
-          {wargaList.length === 0 && !fetching && (
-            <p style={{ color: '#e74c3c', fontSize: '11px', marginTop: '5px' }}>
-              ⚠️ Data warga {dawisDbPattern} tidak ditemukan di database.
-            </p>
-          )}
-        </div>
+          </tbody>
+        </table>
+      </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <div style={{ flex: 1 }}>
-            <label style={labelS}>Jenis Iuran</label>
-            <select style={inputS} value={form.tipe_kas} onChange={e => setForm({...form, tipe_kas: e.target.value})}>
-              <option value="RT">Kas RT</option>
-              <option value="KGR">Kas KGR</option>
-            </select>
-          </div>
-          <div style={{ flex: 1 }}>
-            <label style={labelS}>Nominal (Rp)</label>
-            <input type="number" style={inputS} value={form.jumlah} onChange={e => setForm({...form, jumlah: e.target.value})} placeholder="Contoh: 20000" required />
-          </div>
-        </div>
-
-        <div>
-          <label style={labelS}>Keterangan</label>
-          <input type="text" style={inputS} value={form.keterangan} onChange={e => setForm({...form, keterangan: e.target.value})} placeholder="Misal: Iuran Februari" />
-        </div>
-
-        <button type="submit" disabled={loading || wargaList.length === 0} style={{...btnS, opacity: (loading || wargaList.length === 0) ? 0.6 : 1}}>
-          {loading ? 'Menyimpan...' : 'Simpan Setoran'}
+      <div style={{ padding: '20px', background: '#f8f9fa', textAlign: 'center' }}>
+        <button 
+          onClick={handleSubmitBatch} 
+          disabled={loading}
+          style={{ 
+            width: '100%', 
+            padding: '15px', 
+            background: '#27ae60', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '10px', 
+            fontWeight: 'bold', 
+            fontSize: '16px',
+            cursor: 'pointer'
+          }}
+        >
+          {loading ? '⏳ Sedang Menyimpan...' : '💾 SIMPAN SEMUA IURAN'}
         </button>
-      </form>
+        <p style={{ fontSize: '11px', color: '#999', marginTop: '10px' }}>*Pastikan angka sudah benar sebelum menekan tombol simpan</p>
+      </div>
     </div>
   );
 };
 
-const labelS = { display: 'block', fontSize: '13px', fontWeight: 'bold', marginBottom: '8px', color: '#34495e' };
-const inputS = { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #dfe6e9', boxSizing: 'border-box', outline: 'none', fontSize: '14px' };
-const btnS = { padding: '14px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold', marginTop: '10px', fontSize: '16px' };
+// --- CSS IN JS ---
+const thS = { padding: '12px 10px', textAlign: 'left', fontSize: '12px', color: '#7f8c8d', textTransform: 'uppercase' };
+const tdS = { padding: '10px' };
+const inputTableS = { 
+  width: '100%', 
+  padding: '8px', 
+  borderRadius: '5px', 
+  border: '1px solid #ccc', 
+  textAlign: 'right',
+  fontSize: '14px',
+  outline: 'none'
+};
 
 export default InputIuran;
