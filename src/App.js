@@ -5,9 +5,10 @@ import DataWarga from './pages/DataWarga';
 import InputData from './pages/InputData';
 import InputToko from './pages/InputToko';
 import KegiatanRT from './pages/KegiatanRT';
+import MutasiKas from './pages/MutasiKas'; // Pastikan file ini sudah ada
 
 function App() {
-  // 1. Cek apakah ada data user tersimpan di browser (LocalStorage)
+  // 1. Cek User di LocalStorage (Agar tidak logout saat refresh)
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('simakarti_user');
     return savedUser ? JSON.parse(savedUser) : null;
@@ -15,14 +16,14 @@ function App() {
 
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  // 2. Fungsi Login: Simpan data ke LocalStorage agar awet
+  // 2. Fungsi Login
   const handleLogin = (userData) => {
     setUser(userData);
     localStorage.setItem('simakarti_user', JSON.stringify(userData));
     setActiveTab('dashboard');
   };
 
-  // 3. Fungsi Logout: Hapus data dari LocalStorage
+  // 3. Fungsi Logout
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('simakarti_user');
@@ -34,8 +35,7 @@ function App() {
     return <Login onLogin={handleLogin} />;
   }
 
-  // --- LOGIKA TAMPILAN MENU BERDASARKAN ROLE ---
-  const isWarga = user.role === 'warga';
+  // --- LOGIKA HAK AKSES ---
   const isKetua = user.role === 'ketua';
   const isSekretaris = user.role === 'sekretaris' || isKetua;
   const isBendahara = user.role === 'bendahara' || isKetua;
@@ -43,39 +43,62 @@ function App() {
   const isDawis = user.role.startsWith('dawis');
 
   return (
-    <div style={{ fontFamily: 'Arial, sans-serif', minHeight: '100vh', background: '#f4f6f8' }}>
+    <div style={{ fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif", minHeight: '100vh', background: '#f4f7f6' }}>
       
       {/* --- HEADER --- */}
-      <header style={{ background: '#2c3e50', padding: '15px 20px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0 }}>SIMAKARTI RT 03</h2>
+      <header style={{ background: '#1a252f', padding: '15px 20px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h2 style={{ margin: 0, fontSize: '20px' }}>SIMAKARTI 03</h2>
+          <span style={{ background: '#34495e', padding: '2px 8px', borderRadius: '4px', fontSize: '12px' }}>v1.0</span>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <span style={{ fontSize: '14px' }}>Halo, {user.username} ({user.role})</span>
+          <div style={{ textAlign: 'right', fontSize: '12px' }}>
+            <div style={{ fontWeight: 'bold' }}>{user.username}</div>
+            <div style={{ opacity: 0.8 }}>{user.role}</div>
+          </div>
           <button 
             onClick={handleLogout} 
-            style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '5px 15px', borderRadius: '4px', cursor: 'pointer' }}
+            style={{ background: '#c0392b', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
           >
             Keluar
           </button>
         </div>
       </header>
 
-      {/* --- MENU NAVIGASI --- */}
-      <nav style={{ background: 'white', padding: '10px 20px', borderBottom: '1px solid #ddd', overflowX: 'auto', display: 'flex', gap: '10px' }}>
+      {/* --- NAVIGASI TAB --- */}
+      <nav style={{ background: 'white', padding: '10px 20px', borderBottom: '1px solid #ddd', overflowX: 'auto', display: 'flex', gap: '8px', position: 'sticky', top: 0, zIndex: 100 }}>
         
-        {/* Menu Umum (Semua Bisa Lihat) */}
-        <button style={btnStyle(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}>🏠 Dashboard</button>
-        <button style={btnStyle(activeTab === 'warga')} onClick={() => setActiveTab('warga')}>👥 Data Warga</button>
-        
-        {/* Menu Khusus Warga & Sekretaris */}
-        <button style={btnStyle(activeTab === 'kegiatan')} onClick={() => setActiveTab('kegiatan')}>📅 Kegiatan & Absen</button>
+        {/* 1. Dashboard (Semua) */}
+        <button style={btnStyle(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}>
+          🏠 Dashboard
+        </button>
 
-        {/* Menu Input (Khusus Pengurus) */}
+        {/* 2. Keuangan (Semua) */}
+        <button style={btnStyle(activeTab === 'kas')} onClick={() => setActiveTab('kas')}>
+          💰 Keuangan (Kas & KGR)
+        </button>
+
+        {/* 3. Data Warga (Semua) */}
+        <button style={btnStyle(activeTab === 'warga')} onClick={() => setActiveTab('warga')}>
+          👥 Data Warga
+        </button>
+        
+        {/* 4. Kegiatan & Absen (Semua) */}
+        <button style={btnStyle(activeTab === 'kegiatan')} onClick={() => setActiveTab('kegiatan')}>
+          📅 Kegiatan & Absen
+        </button>
+
+        {/* 5. UMKM (Semua) */}
+        <button style={btnStyle(activeTab === 'toko')} onClick={() => setActiveTab('toko')}>
+          🏪 UMKM Warga
+        </button>
+
+        {/* 6. Input Data (Hanya Pengurus) */}
         {(isSekretaris || isBendahara || isHumas || isDawis) && (
-          <button style={btnStyle(activeTab === 'input')} onClick={() => setActiveTab('input')}>📝 Input Data</button>
+          <button style={btnStyle(activeTab === 'input')} onClick={() => setActiveTab('input')}>
+            📝 Input Master
+          </button>
         )}
-
-        {/* Menu Toko (Khusus Humas & Warga) */}
-        <button style={btnStyle(activeTab === 'toko')} onClick={() => setActiveTab('toko')}>🏪 UMKM Warga</button>
       </nav>
 
       {/* --- KONTEN UTAMA --- */}
@@ -83,26 +106,35 @@ function App() {
         
         {activeTab === 'dashboard' && <Dashboard user={user} />}
         
+        {activeTab === 'kas' && <MutasiKas user={user} />}
+        
         {activeTab === 'warga' && <DataWarga role={user.role} />}
         
+        {activeTab === 'kegiatan' && <KegiatanRT role={user.role} />}
+        
+        {activeTab === 'toko' && <InputToko user={user} viewOnly={!isHumas} />}
+
         {activeTab === 'input' && (
           <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
-            {isHumas && <InputToko user={user} />}
-            {(isSekretaris || isDawis) && <InputData user={user} />}
-            {/* Nanti Input Kas Bendahara disini */}
+            <h3>Menu Input Khusus Pengurus</h3>
+            <p>Silakan pilih menu spesifik di atas (Keuangan/Kegiatan) untuk input harian. Menu ini khusus untuk data master.</p>
+            <div style={{ display: 'grid', gap: '10px' }}>
+               {(isSekretaris || isDawis) && <InputData user={user} />}
+            </div>
           </div>
         )}
 
-        {activeTab === 'toko' && <InputToko user={user} viewOnly={!isHumas} />}
-        
-        {activeTab === 'kegiatan' && <KegiatanRT role={user.role} />}
-
       </main>
+
+      {/* FOOTER */}
+      <footer style={{ textAlign: 'center', padding: '20px', color: '#777', fontSize: '12px' }}>
+        &copy; 2025 SIMAKARTI RT 03 - Dibangun untuk Warga
+      </footer>
     </div>
   );
 }
 
-// Style Tombol Menu
+// Style Tombol
 const btnStyle = (isActive) => ({
   padding: '8px 16px',
   background: isActive ? '#3498db' : 'transparent',
@@ -110,8 +142,9 @@ const btnStyle = (isActive) => ({
   border: isActive ? 'none' : '1px solid #ddd',
   borderRadius: '20px',
   cursor: 'pointer',
-  fontWeight: isActive ? 'bold' : 'normal',
-  whiteSpace: 'nowrap'
+  fontWeight: isActive ? 'bold' : '500',
+  whiteSpace: 'nowrap',
+  transition: 'all 0.2s'
 });
 
-export default App;
+export default App;e
