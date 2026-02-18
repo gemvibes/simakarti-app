@@ -16,7 +16,7 @@ const emptyForm = {
 const DataWarga = ({ user }) => {
   const [warga, setWarga] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [filterDawis, setFilterDawis] = useState('SEMUA');
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
