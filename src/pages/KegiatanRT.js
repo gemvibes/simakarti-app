@@ -9,6 +9,8 @@ const KegiatanRT = ({ user }) => {
   const [expandedId, setExpandedId] = useState(null);
   const [absensiData, setAbsensiData] = useState({});
   const [loadingAbsensi, setLoadingAbsensi] = useState(false);
+  // Menyimpan mapping: kegiatan_rt.id -> pertemuan.id
+  const [pertemuanMap, setPertemuanMap] = useState({});
 
   const [formData, setFormData] = useState({
     nama_kegiatan: '',
@@ -17,7 +19,6 @@ const KegiatanRT = ({ user }) => {
     lokasi: 'RT 03'
   });
 
-  // Hanya Sekretaris dan Ketua yang bisa tambah/edit
   const canInput = ['sekretaris', 'ketua'].includes(user.role);
 
   useEffect(() => {
@@ -27,14 +28,11 @@ const KegiatanRT = ({ user }) => {
 
   const fetchKegiatan = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('kegiatan_rt')
       .select('*')
       .order('tanggal', { ascending: false });
-
-    if (!error) {
-      setKegiatan(data || []);
-    }
+    if (data) setKegiatan(data);
     setLoading(false);
   };
 
@@ -48,31 +46,69 @@ const KegiatanRT = ({ user }) => {
     if (data) setWargaList(data);
   };
 
-  const fetchAbsensi = async (kegiatanId) => {
+  // Cari atau buat record di tabel pertemuan yang terhubung ke kegiatan_rt
+  const getOrCreatePertemuan = async (kegiatan) => {
+    // Cek apakah sudah ada di map lokal
+    if (pertemuanMap[kegiatan.id]) return pertemuanMap[kegiatan.id];
+
+    // Cari di database berdasarkan judul + tanggal yang sama
+    const { data: existing } = await supabase
+      .from('pertemuan')
+      .select('id')
+      .eq('judul_acara', kegiatan.nama_kegiatan || kegiatan.judul_acara)
+      .eq('tanggal', kegiatan.tanggal)
+      .maybeSingle();
+
+    if (existing) {
+      setPertemuanMap(prev => ({ ...prev, [kegiatan.id]: existing.id }));
+      return existing.id;
+    }
+
+    // Belum ada, buat baru
+    const { data: baru, error } = await supabase
+      .from('pertemuan')
+      .insert([{
+        judul_acara: kegiatan.nama_kegiatan || kegiatan.judul_acara,
+        tanggal: kegiatan.tanggal,
+        lokasi: kegiatan.lokasi || 'RT 03',
+        notulen: kegiatan.notulensi || ''
+      }])
+      .select('id')
+      .single();
+
+    if (error) {
+      alert('Gagal membuat data pertemuan: ' + error.message);
+      return null;
+    }
+
+    setPertemuanMap(prev => ({ ...prev, [kegiatan.id]: baru.id }));
+    return baru.id;
+  };
+
+  const fetchAbsensi = async (kegiatan) => {
     setLoadingAbsensi(true);
+    const pertemuanId = await getOrCreatePertemuan(kegiatan);
+    if (!pertemuanId) { setLoadingAbsensi(false); return; }
+
     const { data } = await supabase
       .from('absensi')
       .select('warga_id, status_hadir')
-      .eq('pertemuan_id', kegiatanId);
+      .eq('pertemuan_id', pertemuanId);
 
     const map = {};
-    if (data) {
-      data.forEach(a => { map[a.warga_id] = a.status_hadir; });
-    }
-    // Isi default hadir = false untuk yang belum ada di database
-    wargaList.forEach(w => {
-      if (map[w.id] === undefined) map[w.id] = false;
-    });
+    if (data) data.forEach(a => { map[a.warga_id] = a.status_hadir; });
+    // Default semua warga = belum hadir
+    wargaList.forEach(w => { if (map[w.id] === undefined) map[w.id] = false; });
     setAbsensiData(map);
     setLoadingAbsensi(false);
   };
 
-  const toggleExpand = async (id) => {
-    if (expandedId === id) {
+  const toggleExpand = async (kegiatan) => {
+    if (expandedId === kegiatan.id) {
       setExpandedId(null);
     } else {
-      setExpandedId(id);
-      await fetchAbsensi(id);
+      setExpandedId(kegiatan.id);
+      await fetchAbsensi(kegiatan);
     }
   };
 
@@ -80,14 +116,21 @@ const KegiatanRT = ({ user }) => {
     setAbsensiData(prev => ({ ...prev, [wargaId]: !prev[wargaId] }));
   };
 
-  const simpanAbsensi = async (kegiatanId) => {
+  const simpanAbsensi = async (kegiatan) => {
     setLoadingAbsensi(true);
-    // Hapus dulu absensi lama untuk kegiatan ini
-    await supabase.from('absensi').delete().eq('pertemuan_id', kegiatanId);
+    const pertemuanId = pertemuanMap[kegiatan.id];
+    if (!pertemuanId) {
+      alert('Terjadi kesalahan, coba tutup dan buka lagi daftar hadir.');
+      setLoadingAbsensi(false);
+      return;
+    }
 
-    // Masukkan data baru
+    // Hapus absensi lama
+    await supabase.from('absensi').delete().eq('pertemuan_id', pertemuanId);
+
+    // Insert absensi baru
     const payloads = Object.keys(absensiData).map(wargaId => ({
-      pertemuan_id: kegiatanId,
+      pertemuan_id: pertemuanId,
       warga_id: wargaId,
       status_hadir: absensiData[wargaId]
     }));
@@ -96,8 +139,8 @@ const KegiatanRT = ({ user }) => {
 
     const jumlahHadir = Object.values(absensiData).filter(v => v).length;
 
-    // Update jumlah_hadir di kegiatan_rt
-    await supabase.from('kegiatan_rt').update({ jumlah_hadir: jumlahHadir }).eq('id', kegiatanId);
+    // Update jumlah hadir di kegiatan_rt
+    await supabase.from('kegiatan_rt').update({ jumlah_hadir: jumlahHadir }).eq('id', kegiatan.id);
 
     if (!error) {
       alert(`✅ Daftar hadir tersimpan! ${jumlahHadir} warga hadir.`);
@@ -116,7 +159,7 @@ const KegiatanRT = ({ user }) => {
       .from('kegiatan_rt')
       .insert([{
         nama_kegiatan: formData.nama_kegiatan,
-        judul_acara: formData.nama_kegiatan, // sync ke kolom lama
+        judul_acara: formData.nama_kegiatan,
         notulensi: formData.notulensi,
         lokasi: formData.lokasi,
         tanggal: formData.tanggal,
@@ -141,16 +184,13 @@ const KegiatanRT = ({ user }) => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h3 style={{ margin: 0, color: '#2c3e50' }}>📅 Agenda & Notulensi Kegiatan</h3>
         {canInput && (
-          <button
-            onClick={() => setShowForm(!showForm)}
-            style={{ background: showForm ? '#e74c3c' : '#3498db', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
-          >
+          <button onClick={() => setShowForm(!showForm)}
+            style={{ background: showForm ? '#e74c3c' : '#3498db', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
             {showForm ? 'Batal' : '+ Tambah Kegiatan'}
           </button>
         )}
       </div>
 
-      {/* Form Input */}
       {showForm && (
         <div style={{ background: 'white', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
           <form onSubmit={handleSave}>
@@ -185,7 +225,6 @@ const KegiatanRT = ({ user }) => {
         </div>
       )}
 
-      {/* Daftar Kegiatan */}
       {kegiatan.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px', background: 'white', borderRadius: '12px', color: '#7f8c8d' }}>
           Belum ada riwayat kegiatan yang tercatat.
@@ -196,7 +235,7 @@ const KegiatanRT = ({ user }) => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <h4 style={{ margin: 0, color: '#2c3e50', fontSize: '18px' }}>{k.nama_kegiatan || k.judul_acara}</h4>
-                <div style={{ display: 'flex', gap: '15px', marginTop: '5px' }}>
+                <div style={{ display: 'flex', gap: '15px', marginTop: '5px', flexWrap: 'wrap' }}>
                   <span style={metaS}>🗓️ {k.tanggal}</span>
                   <span style={metaS}>📍 {k.lokasi || 'RT 03'}</span>
                   <span style={metaS}>👥 {k.jumlah_hadir || 0} Hadir</span>
@@ -212,17 +251,13 @@ const KegiatanRT = ({ user }) => {
               </p>
             </div>
 
-            {/* Tombol Daftar Hadir */}
             <div style={{ marginTop: '10px' }}>
-              <button
-                onClick={() => toggleExpand(k.id)}
-                style={{ background: expandedId === k.id ? '#e74c3c' : '#8e44ad', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
-              >
+              <button onClick={() => toggleExpand(k)}
+                style={{ background: expandedId === k.id ? '#e74c3c' : '#8e44ad', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}>
                 {expandedId === k.id ? '✖ Tutup Daftar Hadir' : '📋 Lihat / Isi Daftar Hadir'}
               </button>
             </div>
 
-            {/* Panel Daftar Hadir */}
             {expandedId === k.id && (
               <div style={{ marginTop: '15px', background: '#f8f9fa', padding: '15px', borderRadius: '10px' }}>
                 <h5 style={{ margin: '0 0 10px 0', color: '#2c3e50' }}>📋 Daftar Hadir Warga</h5>
@@ -233,27 +268,21 @@ const KegiatanRT = ({ user }) => {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px', marginBottom: '15px' }}>
                       {wargaList.map(w => (
                         <label key={w.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', background: absensiData[w.id] ? '#d5f5e3' : 'white', borderRadius: '6px', border: `1px solid ${absensiData[w.id] ? '#27ae60' : '#ddd'}`, cursor: canInput ? 'pointer' : 'default', fontSize: '13px' }}>
-                          <input
-                            type="checkbox"
-                            checked={!!absensiData[w.id]}
+                          <input type="checkbox" checked={!!absensiData[w.id]}
                             onChange={() => canInput && toggleHadir(w.id)}
-                            disabled={!canInput}
-                          />
+                            disabled={!canInput} />
                           <span>{w.nama_lengkap}</span>
                           <span style={{ marginLeft: 'auto', fontSize: '10px', color: '#95a5a6' }}>{w.dawis}</span>
                         </label>
                       ))}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                       <span style={{ fontSize: '13px', color: '#27ae60', fontWeight: 'bold' }}>
                         ✅ {Object.values(absensiData).filter(v => v).length} dari {wargaList.length} warga hadir
                       </span>
                       {canInput && (
-                        <button
-                          onClick={() => simpanAbsensi(k.id)}
-                          disabled={loadingAbsensi}
-                          style={{ background: '#27ae60', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
-                        >
+                        <button onClick={() => simpanAbsensi(k)} disabled={loadingAbsensi}
+                          style={{ background: '#27ae60', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
                           {loadingAbsensi ? 'Menyimpan...' : '💾 Simpan Absensi'}
                         </button>
                       )}
