@@ -9,10 +9,12 @@ const InputIuranToko = ({ user }) => {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [riwayat, setRiwayat] = useState([]);
+  const [editBundel, setEditBundel] = useState(null);
 
-  // Form tambah toko baru
+  // Form tambah/edit toko
   const emptyToko = { nama_lengkap: '', nominal_rt_standar: '' };
   const [formToko, setFormToko] = useState(emptyToko);
+  const [editTokoTarget, setEditTokoTarget] = useState(null);
   const [savingToko, setSavingToko] = useState(false);
 
   const isHumas = user.role === 'humas';
@@ -42,11 +44,12 @@ const InputIuranToko = ({ user }) => {
       .from('mutasi_kas')
       .select('*')
       .eq('pj', user.username)
-      .ilike('bundel_id', 'TOKO-%')
       .order('created_at', { ascending: false });
 
     if (data) {
-      const grouped = data.reduce((acc, item) => {
+      // Filter hanya yang dari toko (bundel_id mulai TOKO- atau keterangan Iuran Toko)
+      const filtered = data.filter(m => (m.bundel_id && m.bundel_id.startsWith('TOKO-')) || (m.keterangan && m.keterangan.includes('Iuran Toko')));
+      const grouped = filtered.reduce((acc, item) => {
         const key = item.bundel_id || item.id;
         if (!acc[key]) acc[key] = { id: key, bundel_id: item.bundel_id, status: item.status, tgl: item.created_at, items: [], total: 0 };
         acc[key].items.push(item);
@@ -57,70 +60,69 @@ const InputIuranToko = ({ user }) => {
     }
   };
 
-  // ── TAMBAH TOKO BARU ──
-  const handleTambahToko = async (e) => {
-    e.preventDefault();
-    if (!formToko.nama_lengkap.trim()) { alert('Nama toko wajib diisi!'); return; }
-    setSavingToko(true);
+  // ── RESET FORM IURAN ──
+  const resetFormIuran = () => {
+    setEditBundel(null);
+    const init = {};
+    tokoList.forEach(t => { init[t.id] = t.nominal_rt_standar ? String(t.nominal_rt_standar) : ''; });
+    setIuranData(init);
+    setTanggal(new Date().toISOString().split('T')[0]);
+  };
 
-    const { error } = await supabase.from('warga').insert([{
-      nama_lengkap: formToko.nama_lengkap.trim().toUpperCase(),
-      dawis: 'TOKO',
-      tipe_subjek: 'Toko',
-      status_rumah: 'Tetap',
-      nominal_rt_standar: parseFloat(formToko.nominal_rt_standar) || 0,
-      nominal_kgr_standar: 0,
-      is_active: true
-    }]);
-
-    if (!error) {
-      alert(`✅ Toko "${formToko.nama_lengkap.toUpperCase()}" berhasil ditambahkan dan langsung aktif!`);
-      setFormToko(emptyToko);
-      setTab('iuran');
-      fetchToko();
-    } else {
-      alert('Gagal menambah toko: ' + error.message);
+  // ── BUKA EDIT SETORAN ──
+  const bukaEditBundel = (bundel) => {
+    if (bundel.status !== 'PENDING') {
+      alert('Setoran yang sudah APPROVED tidak bisa diedit.\nMinta Bendahara untuk membatalkan approval terlebih dahulu.');
+      return;
     }
-    setSavingToko(false);
+    setEditBundel(bundel);
+    const newData = {};
+    tokoList.forEach(t => { newData[t.id] = ''; });
+    bundel.items.forEach(item => {
+      if (item.warga_id && newData[item.warga_id] !== undefined) {
+        newData[item.warga_id] = String(item.jumlah);
+      }
+    });
+    setIuranData(newData);
+    setTanggal(bundel.tgl ? bundel.tgl.split('T')[0] : new Date().toISOString().split('T')[0]);
+    setTab('iuran');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // ── NONAKTIFKAN TOKO ──
-  const handleHapusToko = async (id, nama) => {
-    if (!window.confirm(`Nonaktifkan toko "${nama}"? Toko tidak akan muncul di daftar iuran.`)) return;
-    const { error } = await supabase.from('warga').update({ is_active: false }).eq('id', id);
-    if (!error) { alert('🗑️ Toko berhasil dinonaktifkan.'); fetchToko(); }
-    else alert('Gagal: ' + error.message);
-  };
-
-  // ── KIRIM SETORAN TOKO ──
+  // ── KIRIM / UPDATE SETORAN ──
   const handleSubmit = async () => {
     const payloads = [];
-    const bundelId = `TOKO-${tanggal.replace(/-/g, '')}-${Date.now().toString().slice(-3)}`;
+    const bundelId = editBundel?.bundel_id || `TOKO-${tanggal.replace(/-/g, '')}-${Date.now().toString().slice(-3)}`;
 
     Object.keys(iuranData).forEach(tokoId => {
       const nominal = parseFloat(iuranData[tokoId]);
       const namaToko = tokoList.find(t => t.id === tokoId)?.nama_lengkap;
       if (nominal > 0) {
         payloads.push({
-          tipe_kas: 'RT',
-          jenis: 'Masuk',
-          jumlah: nominal,
+          tipe_kas: 'RT', jenis: 'Masuk', jumlah: nominal,
           keterangan: `Iuran Toko - ${namaToko}`,
-          warga_id: tokoId,
-          pj: user.username,
-          status: 'PENDING',
-          bundel_id: bundelId,
-          created_at: tanggal
+          warga_id: tokoId, pj: user.username,
+          status: 'PENDING', bundel_id: bundelId, created_at: tanggal
         });
       }
     });
 
     if (payloads.length === 0) return alert('Belum ada nominal yang diisi!');
     setLoading(true);
+
+    if (editBundel) {
+      // Hapus data lama lalu insert baru
+      if (editBundel.bundel_id) {
+        await supabase.from('mutasi_kas').delete().eq('bundel_id', editBundel.bundel_id);
+      } else {
+        await supabase.from('mutasi_kas').delete().in('id', editBundel.items.map(i => i.id));
+      }
+    }
+
     const { error } = await supabase.from('mutasi_kas').insert(payloads);
     if (!error) {
-      alert('✅ Setoran Toko berhasil dikirim! Menunggu persetujuan Bendahara.');
-      fetchToko();
+      alert(editBundel ? '✅ Setoran berhasil diperbarui!' : '✅ Setoran berhasil dikirim! Menunggu persetujuan Bendahara.');
+      resetFormIuran();
       fetchRiwayat();
       setTab('riwayat');
     } else {
@@ -129,18 +131,72 @@ const InputIuranToko = ({ user }) => {
     setLoading(false);
   };
 
+  // ── TAMBAH / EDIT DATA TOKO ──
+  const bukaEditToko = (toko) => {
+    setEditTokoTarget(toko);
+    setFormToko({ nama_lengkap: toko.nama_lengkap, nominal_rt_standar: toko.nominal_rt_standar ? String(toko.nominal_rt_standar) : '' });
+    setTab('tambah');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const tutupFormToko = () => {
+    setEditTokoTarget(null);
+    setFormToko(emptyToko);
+  };
+
+  const handleSimpanToko = async (e) => {
+    e.preventDefault();
+    if (!formToko.nama_lengkap.trim()) { alert('Nama toko wajib diisi!'); return; }
+    setSavingToko(true);
+
+    const payload = {
+      nama_lengkap: formToko.nama_lengkap.trim().toUpperCase(),
+      nominal_rt_standar: parseFloat(formToko.nominal_rt_standar) || 0,
+    };
+
+    let error;
+    if (editTokoTarget) {
+      ({ error } = await supabase.from('warga').update(payload).eq('id', editTokoTarget.id));
+    } else {
+      ({ error } = await supabase.from('warga').insert([{
+        ...payload, dawis: 'TOKO', tipe_subjek: 'Toko',
+        status_rumah: 'Tetap', nominal_kgr_standar: 0, is_active: true
+      }]));
+    }
+
+    if (!error) {
+      alert(editTokoTarget ? `✅ Data toko "${payload.nama_lengkap}" berhasil diperbarui!` : `✅ Toko "${payload.nama_lengkap}" berhasil didaftarkan!`);
+      tutupFormToko();
+      fetchToko();
+      setTab('kelola');
+    } else {
+      alert('Gagal: ' + error.message);
+    }
+    setSavingToko(false);
+  };
+
+  // ── NONAKTIFKAN TOKO ──
+  const handleHapusToko = async (id, nama) => {
+    if (!window.confirm(`Nonaktifkan toko "${nama}"?\nToko tidak akan muncul di daftar iuran, namun riwayat iuran tetap tersimpan.`)) return;
+    const { error } = await supabase.from('warga').update({ is_active: false }).eq('id', id);
+    if (!error) { alert('🗑️ Toko berhasil dinonaktifkan.'); fetchToko(); }
+    else alert('Gagal: ' + error.message);
+  };
+
   if (fetching) return <div style={{ padding: '20px', textAlign: 'center' }}>Memuat Daftar Toko...</div>;
+
+  const tabList = [
+    ['iuran', '🏪 Input Iuran', '#8e44ad'],
+    ['riwayat', '📋 Riwayat', '#2c3e50'],
+    ...(isHumas ? [['tambah', editTokoTarget ? '✏️ Edit Toko' : '➕ Tambah Toko', '#27ae60'], ['kelola', '⚙️ Kelola Toko', '#e67e22']] : [])
+  ];
 
   return (
     <div style={{ maxWidth: '700px', margin: '0 auto' }}>
       {/* TAB */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '15px', flexWrap: 'wrap' }}>
-        {[
-          ['iuran', '🏪 Input Iuran Toko', '#8e44ad'],
-          ['riwayat', '📋 Riwayat Setoran', '#2c3e50'],
-          ...(isHumas ? [['tambah', '➕ Tambah Toko Baru', '#27ae60'], ['kelola', '⚙️ Kelola Toko', '#e67e22']] : [])
-        ].map(([key, label, color]) => (
-          <button key={key} onClick={() => setTab(key)}
+        {tabList.map(([key, label, color]) => (
+          <button key={key} onClick={() => { setTab(key); if (key !== 'tambah') tutupFormToko(); }}
             style={{ padding: '9px 16px', borderRadius: '25px', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', background: tab === key ? color : '#f0f0f0', color: tab === key ? 'white' : '#555' }}>
             {label}
           </button>
@@ -150,20 +206,27 @@ const InputIuranToko = ({ user }) => {
       {/* ══ TAB INPUT IURAN ══ */}
       {tab === 'iuran' && (
         <div style={{ background: 'white', borderRadius: '15px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
-          <div style={{ background: '#8e44ad', color: 'white', padding: '20px' }}>
-            <h3 style={{ margin: 0 }}>🏪 Iuran Toko & Usaha</h3>
-            <p style={{ fontSize: '12px', opacity: 0.9, margin: '5px 0 10px' }}>Kelola setoran bulanan unit usaha RT 03</p>
+          <div style={{ background: editBundel ? '#e67e22' : '#8e44ad', color: 'white', padding: '20px' }}>
+            <h3 style={{ margin: 0 }}>{editBundel ? '✏️ Edit Setoran Toko' : '🏪 Iuran Toko & Usaha'}</h3>
+            {editBundel && (
+              <div style={{ marginTop: '8px', fontSize: '12px', background: 'rgba(255,255,255,0.2)', padding: '6px 10px', borderRadius: '6px' }}>
+                ⚠️ Mode Edit — data lama akan diganti.
+                <button onClick={() => { resetFormIuran(); }} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', textDecoration: 'underline', fontSize: '12px', marginLeft: '8px' }}>Batal Edit</button>
+              </div>
+            )}
+            <p style={{ fontSize: '12px', opacity: 0.9, margin: '8px 0 10px' }}>Kelola setoran bulanan unit usaha RT 03</p>
             <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)}
               style={{ padding: '8px', borderRadius: '5px', border: 'none', width: '100%', maxWidth: '200px' }} />
           </div>
 
           {tokoList.length === 0 ? (
             <div style={{ padding: '30px', textAlign: 'center', color: '#7f8c8d' }}>
-              Belum ada toko terdaftar.{isHumas && <span> <button onClick={() => setTab('tambah')} style={{ background: 'none', border: 'none', color: '#8e44ad', cursor: 'pointer', fontWeight: 'bold', textDecoration: 'underline' }}>Tambah toko baru</button></span>}
+              Belum ada toko terdaftar.
+              {isHumas && <> <button onClick={() => setTab('tambah')} style={{ background: 'none', border: 'none', color: '#8e44ad', cursor: 'pointer', fontWeight: 'bold', textDecoration: 'underline' }}>Tambah toko baru</button></>}
             </div>
           ) : (
             <>
-              <div style={{ padding: '5px' }}>
+              <div>
                 {tokoList.map(t => (
                   <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 15px', borderBottom: '1px solid #eee' }}>
                     <div>
@@ -172,8 +235,11 @@ const InputIuranToko = ({ user }) => {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '12px', color: '#7f8c8d' }}>Rp</span>
-                      <input type="number" value={iuranData[t.id] || ''} onChange={(e) => setIuranData(prev => ({ ...prev, [t.id]: e.target.value }))}
-                        style={{ width: '110px', padding: '8px', borderRadius: '6px', border: '1px solid #ddd', textAlign: 'right' }} placeholder="0" />
+                      <input type="number"
+                        value={iuranData[t.id] || ''}
+                        onChange={(e) => setIuranData(prev => ({ ...prev, [t.id]: e.target.value }))}
+                        style={{ width: '110px', padding: '8px', borderRadius: '6px', border: '1px solid #ddd', textAlign: 'right' }}
+                        placeholder="0" />
                     </div>
                   </div>
                 ))}
@@ -189,8 +255,8 @@ const InputIuranToko = ({ user }) => {
 
               <div style={{ padding: '15px 20px' }}>
                 <button onClick={handleSubmit} disabled={loading}
-                  style={{ width: '100%', padding: '14px', background: '#8e44ad', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}>
-                  {loading ? 'Menyimpan...' : '📤 KIRIM SETORAN KE BENDAHARA'}
+                  style={{ width: '100%', padding: '14px', background: editBundel ? '#e67e22' : '#8e44ad', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}>
+                  {loading ? 'Menyimpan...' : editBundel ? '📤 PERBARUI SETORAN' : '📤 KIRIM SETORAN KE BENDAHARA'}
                 </button>
               </div>
             </>
@@ -213,9 +279,20 @@ const InputIuranToko = ({ user }) => {
                     <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#2c3e50' }}>Rp {b.total.toLocaleString('id-ID')}</div>
                     <div style={{ fontSize: '12px', color: '#7f8c8d' }}>{b.items.length} toko</div>
                   </div>
-                  <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', background: b.status === 'APPROVED' ? '#d5f5e3' : '#fef9e7', color: b.status === 'APPROVED' ? '#27ae60' : '#e67e22' }}>
-                    {b.status}
-                  </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                    <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', background: b.status === 'APPROVED' ? '#d5f5e3' : '#fef9e7', color: b.status === 'APPROVED' ? '#27ae60' : '#e67e22' }}>
+                      {b.status}
+                    </span>
+                    {b.status === 'PENDING' && (
+                      <button onClick={() => bukaEditBundel(b)}
+                        style={{ background: '#e67e22', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>
+                        ✏️ Edit Setoran
+                      </button>
+                    )}
+                    {b.status === 'APPROVED' && (
+                      <span style={{ fontSize: '11px', color: '#27ae60' }}>✅ Sudah diterima Bendahara</span>
+                    )}
+                  </div>
                 </div>
                 <div style={{ padding: '0 18px 12px', borderTop: '1px solid #f5f5f5' }}>
                   {b.items.map(item => (
@@ -231,14 +308,16 @@ const InputIuranToko = ({ user }) => {
         </div>
       )}
 
-      {/* ══ TAB TAMBAH TOKO (hanya humas) ══ */}
+      {/* ══ TAB TAMBAH / EDIT TOKO ══ */}
       {tab === 'tambah' && isHumas && (
         <div style={{ background: 'white', borderRadius: '15px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
-          <div style={{ background: '#27ae60', color: 'white', padding: '20px' }}>
-            <h3 style={{ margin: 0 }}>➕ Daftarkan Toko / Usaha Baru</h3>
-            <p style={{ fontSize: '12px', opacity: 0.9, margin: '5px 0 0' }}>Toko yang didaftarkan langsung aktif dan muncul di daftar iuran</p>
+          <div style={{ background: editTokoTarget ? '#f39c12' : '#27ae60', color: 'white', padding: '20px' }}>
+            <h3 style={{ margin: 0 }}>{editTokoTarget ? '✏️ Edit Data Toko' : '➕ Daftarkan Toko / Usaha Baru'}</h3>
+            <p style={{ fontSize: '12px', opacity: 0.9, margin: '5px 0 0' }}>
+              {editTokoTarget ? `Mengubah data: ${editTokoTarget.nama_lengkap}` : 'Toko langsung aktif dan muncul di daftar iuran'}
+            </p>
           </div>
-          <form onSubmit={handleTambahToko} style={{ padding: '25px' }}>
+          <form onSubmit={handleSimpanToko} style={{ padding: '25px' }}>
             <div style={fGroup}>
               <label style={fLabel}>Nama Toko / Usaha *</label>
               <input type="text" required style={fInput} value={formToko.nama_lengkap}
@@ -251,36 +330,56 @@ const InputIuranToko = ({ user }) => {
               <input type="number" style={fInput} value={formToko.nominal_rt_standar}
                 onChange={e => setFormToko({ ...formToko, nominal_rt_standar: e.target.value })}
                 placeholder="Contoh: 25000" />
-              <div style={{ fontSize: '11px', color: '#95a5a6', marginTop: '4px' }}>Kosongkan jika nominal iuran berbeda setiap bulan</div>
+              <div style={{ fontSize: '11px', color: '#95a5a6', marginTop: '4px' }}>Kosongkan jika nominal berbeda setiap bulan</div>
             </div>
-            <button type="submit" disabled={savingToko}
-              style={{ width: '100%', padding: '14px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}>
-              {savingToko ? 'Menyimpan...' : '✅ DAFTARKAN TOKO'}
-            </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              {editTokoTarget && (
+                <button type="button" onClick={() => { tutupFormToko(); setTab('kelola'); }}
+                  style={{ flex: 1, padding: '13px', background: '#bdc3c7', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>
+                  Batal
+                </button>
+              )}
+              <button type="submit" disabled={savingToko}
+                style={{ flex: 2, padding: '13px', background: editTokoTarget ? '#f39c12' : '#27ae60', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}>
+                {savingToko ? 'Menyimpan...' : editTokoTarget ? 'SIMPAN PERUBAHAN' : '✅ DAFTARKAN TOKO'}
+              </button>
+            </div>
           </form>
         </div>
       )}
 
-      {/* ══ TAB KELOLA TOKO (hanya humas) ══ */}
+      {/* ══ TAB KELOLA TOKO ══ */}
       {tab === 'kelola' && isHumas && (
         <div>
-          <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>⚙️ Kelola Daftar Toko</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+            <h3 style={{ margin: 0, color: '#2c3e50' }}>⚙️ Kelola Daftar Toko</h3>
+            <button onClick={() => { tutupFormToko(); setTab('tambah'); }}
+              style={{ background: '#27ae60', color: 'white', border: 'none', padding: '9px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
+              ➕ Tambah Toko
+            </button>
+          </div>
           <div style={{ background: '#fff9f0', border: '1px solid #f39c12', borderRadius: '10px', padding: '12px 15px', marginBottom: '15px', fontSize: '13px', color: '#7d6608' }}>
-            💡 Anda dapat menonaktifkan toko yang sudah tutup. Data iuran lama tetap tersimpan.
+            💡 Edit nama atau nominal iuran toko. Nonaktifkan toko yang sudah tutup — riwayat iuran tetap tersimpan.
           </div>
           {tokoList.length === 0 ? (
             <div style={{ padding: '30px', textAlign: 'center', background: 'white', borderRadius: '12px', color: '#7f8c8d' }}>Belum ada toko terdaftar.</div>
           ) : (
             tokoList.map(t => (
-              <div key={t.id} style={{ background: 'white', borderRadius: '10px', padding: '14px 18px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+              <div key={t.id} style={{ background: 'white', borderRadius: '10px', padding: '14px 18px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', flexWrap: 'wrap', gap: '10px' }}>
                 <div>
                   <div style={{ fontWeight: 'bold', color: '#2c3e50' }}>{t.nama_lengkap}</div>
                   <div style={{ fontSize: '12px', color: '#7f8c8d' }}>Iuran standar: Rp {Number(t.nominal_rt_standar || 0).toLocaleString('id-ID')}/bulan</div>
                 </div>
-                <button onClick={() => handleHapusToko(t.id, t.nama_lengkap)}
-                  style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '7px 13px', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>
-                  🗑️ Nonaktifkan
-                </button>
+                <div style={{ display: 'flex', gap: '7px' }}>
+                  <button onClick={() => bukaEditToko(t)}
+                    style={{ background: '#f39c12', color: 'white', border: 'none', padding: '7px 13px', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>
+                    ✏️ Edit
+                  </button>
+                  <button onClick={() => handleHapusToko(t.id, t.nama_lengkap)}
+                    style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '7px 13px', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>
+                    🗑️ Nonaktifkan
+                  </button>
+                </div>
               </div>
             ))
           )}
