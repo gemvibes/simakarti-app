@@ -3,177 +3,100 @@ import { supabase } from '../lib/supabaseClient';
 
 const InputIuran = ({ user }) => {
   const [wargaList, setWargaList] = useState([]);
-  const [iuranData, setIuranData] = useState({}); // Menyimpan input angka per warga
+  const [iuranData, setIuranData] = useState({});
+  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(true);
-
-  const toRomawi = (num) => {
-    const romawi = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI' };
-    return romawi[num] || num;
-  };
 
   const roleNumber = user.role.replace('dawis', '');
+  const toRomawi = (n) => ({1:'I', 2:'II', 3:'III', 4:'IV', 5:'V', 6:'VI'}[n] || n);
   const dawisLabel = `DAWIS ${toRomawi(roleNumber)}`;
 
-  useEffect(() => {
-    fetchWarga();
-  }, [user.role]);
+  useEffect(() => { fetchWarga(); }, [user.role]);
 
   const fetchWarga = async () => {
-    setFetching(true);
-    const { data, error } = await supabase
-      .from('warga')
-      .select('id, nama_lengkap')
-      .eq('dawis', dawisLabel)
-      .order('nama_lengkap', { ascending: true });
-
-    if (!error && data) {
+    const { data } = await supabase.from('warga').select('id, nama_lengkap').eq('dawis', dawisLabel).order('nama_lengkap', { ascending: true });
+    if (data) {
       setWargaList(data);
-      // Inisialisasi object input kosong untuk setiap warga
-      const initialInput = {};
-      data.forEach(w => {
-        initialInput[w.id] = { rt: '', kgr: '' };
-      });
-      setIuranData(initialInput);
+      const initial = {};
+      data.forEach(w => { initial[w.id] = { rt: '', kgr: '' }; });
+      setIuranData(initial);
     }
-    setFetching(false);
   };
 
-  const handleInputChange = (id, field, value) => {
-    setIuranData(prev => ({
-      ...prev,
-      [id]: { ...prev[id], [field]: value }
-    }));
+  const handleInputChange = (id, field, val) => {
+    setIuranData(prev => ({ ...prev, [id]: { ...prev[id], [field]: val } }));
   };
 
   const handleSubmitBatch = async () => {
     const payloads = [];
-    
-    // Scan semua input yang ada isinya
-    Object.keys(iuranData).forEach(wargaId => {
-      const { rt, kgr } = iuranData[wargaId];
-      const namaWarga = wargaList.find(w => w.id === wargaId)?.nama_lengkap;
+    const bundelId = `${tanggal.replace(/-/g, '')}-D${roleNumber}-${Date.now().toString().slice(-4)}`;
 
-      if (rt && parseFloat(rt) > 0) {
-        payloads.push({
-          tipe_kas: 'RT',
-          jenis: 'Masuk',
-          jumlah: parseFloat(rt),
-          keterangan: `Iuran RT - ${namaWarga} (via ${user.username})`,
-          warga_id: wargaId,
-          pj: user.username
-        });
-      }
-      if (kgr && parseFloat(kgr) > 0) {
-        payloads.push({
-          tipe_kas: 'KGR',
-          jenis: 'Masuk',
-          jumlah: parseFloat(kgr),
-          keterangan: `Iuran KGR - ${namaWarga} (via ${user.username})`,
-          warga_id: wargaId,
-          pj: user.username
-        });
-      }
+    Object.keys(iuranData).forEach(wId => {
+      const { rt, kgr } = iuranData[wId];
+      const nama = wargaList.find(w => w.id === wId)?.nama_lengkap;
+      
+      const entry = (tipe, jml) => ({
+        tipe_kas: tipe, jenis: 'Masuk', jumlah: parseFloat(jml),
+        keterangan: `Iuran ${tipe} - ${nama}`, warga_id: wId,
+        pj: user.username, status: 'PENDING', bundel_id: bundelId, created_at: tanggal
+      });
+
+      if (rt > 0) payloads.push(entry('RT', rt));
+      if (kgr > 0) payloads.push(entry('KGR', kgr));
     });
 
-    if (payloads.length === 0) return alert("Belum ada angka yang diisi!");
-
+    if (payloads.length === 0) return alert("Isi nominal dulu!");
     setLoading(true);
     const { error } = await supabase.from('mutasi_kas').insert(payloads);
-
     if (!error) {
-      alert("✅ Alhamdulillah, semua iuran berhasil disimpan!");
-      fetchWarga(); // Reset form
-    } else {
-      alert("Terjadi kesalahan: " + error.message);
+      alert("✅ Berhasil dikirim! Status: PENDING (Menunggu Bendahara)");
+      fetchWarga();
     }
     setLoading(false);
   };
 
-  if (fetching) return <div style={{ padding: '20px', textAlign: 'center' }}>Memuat Buku Iuran...</div>;
-
   return (
-    <div style={{ maxWidth: '600px', margin: '0 auto', background: '#fff', borderRadius: '15px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
-      {/* Header Ala Buku Absen */}
-      <div style={{ background: '#27ae60', color: 'white', padding: '20px', textAlign: 'center' }}>
-        <h3 style={{ margin: 0 }}>Buku Iuran {dawisLabel}</h3>
-        <p style={{ margin: '5px 0 0 0', fontSize: '12px', opacity: 0.9 }}>Masukkan nilai uang pada kolom RT/KGR di samping nama warga</p>
+    <div style={{ maxWidth: '700px', margin: '0 auto', background: 'white', borderRadius: '15px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+      <div style={{ background: '#2c3e50', color: 'white', padding: '20px' }}>
+        <h3 style={{ margin: 0 }}>📖 Buku Iuran {dawisLabel}</h3>
+        <div style={{ marginTop: '15px' }}>
+          <label style={{ fontSize: '12px', display: 'block', marginBottom: '5px' }}>Tanggal Setoran:</label>
+          <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} style={dateInputS} />
+        </div>
       </div>
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #dee2e6' }}>
-              <th style={thS}>Nama Warga</th>
-              <th style={{ ...thS, width: '90px' }}>Iuran RT</th>
-              <th style={{ ...thS, width: '90px' }}>KGR</th>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
+            <th style={thS}>Nama Warga</th>
+            <th style={thS}>RT (Rp)</th>
+            <th style={thS}>KGR (Rp)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {wargaList.map(w => (
+            <tr key={w.id} style={{ borderBottom: '1px solid #f1f1f1' }}>
+              <td style={{ ...tdS, fontWeight: 'bold' }}>{w.nama_lengkap}</td>
+              <td style={tdS}><input type="number" style={tiS} value={iuranData[w.id]?.rt || ''} onChange={e => handleInputChange(w.id, 'rt', e.target.value)} placeholder="0" /></td>
+              <td style={tdS}><input type="number" style={tiS} value={iuranData[w.id]?.kgr || ''} onChange={e => handleInputChange(w.id, 'kgr', e.target.value)} placeholder="0" /></td>
             </tr>
-          </thead>
-          <tbody>
-            {wargaList.map((w) => (
-              <tr key={w.id} style={{ borderBottom: '1px solid #eee' }}>
-                <td style={tdS}>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{w.nama_lengkap}</div>
-                </td>
-                <td style={tdS}>
-                  <input 
-                    type="number" 
-                    placeholder="0"
-                    style={inputTableS}
-                    value={iuranData[w.id]?.rt || ''}
-                    onChange={(e) => handleInputChange(w.id, 'rt', e.target.value)}
-                  />
-                </td>
-                <td style={tdS}>
-                  <input 
-                    type="number" 
-                    placeholder="0"
-                    style={inputTableS}
-                    value={iuranData[w.id]?.kgr || ''}
-                    onChange={(e) => handleInputChange(w.id, 'kgr', e.target.value)}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
 
-      <div style={{ padding: '20px', background: '#f8f9fa', textAlign: 'center' }}>
-        <button 
-          onClick={handleSubmitBatch} 
-          disabled={loading}
-          style={{ 
-            width: '100%', 
-            padding: '15px', 
-            background: '#27ae60', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '10px', 
-            fontWeight: 'bold', 
-            fontSize: '16px',
-            cursor: 'pointer'
-          }}
-        >
-          {loading ? '⏳ Sedang Menyimpan...' : '💾 SIMPAN SEMUA IURAN'}
+      <div style={{ padding: '20px', textAlign: 'center' }}>
+        <button onClick={handleSubmitBatch} disabled={loading} style={btnS}>
+          {loading ? 'Mengirim...' : 'KIRIM SETORAN KE BENDAHARA'}
         </button>
-        <p style={{ fontSize: '11px', color: '#999', marginTop: '10px' }}>*Pastikan angka sudah benar sebelum menekan tombol simpan</p>
       </div>
     </div>
   );
 };
 
-// --- CSS IN JS ---
-const thS = { padding: '12px 10px', textAlign: 'left', fontSize: '12px', color: '#7f8c8d', textTransform: 'uppercase' };
+const dateInputS = { padding: '8px', borderRadius: '5px', border: 'none', width: '100%', maxWidth: '200px' };
+const thS = { padding: '12px', textAlign: 'left', fontSize: '12px', color: '#7f8c8d' };
 const tdS = { padding: '10px' };
-const inputTableS = { 
-  width: '100%', 
-  padding: '8px', 
-  borderRadius: '5px', 
-  border: '1px solid #ccc', 
-  textAlign: 'right',
-  fontSize: '14px',
-  outline: 'none'
-};
+const tiS = { width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '6px', textAlign: 'right' };
+const btnS = { width: '100%', padding: '15px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' };
 
 export default InputIuran;
