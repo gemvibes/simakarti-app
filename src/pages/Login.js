@@ -41,11 +41,6 @@ const Login = ({ onLogin }) => {
       <div style={circle3} />
 
       <div style={wrapStyle}>
-        {/* Label atas kartu */}
-        <div style={{ textAlign: 'center', marginBottom: '18px' }}>
-          <span style={versionBadge}>SIMAKARTI · RT 03 RW 03</span>
-        </div>
-
         {/* Kartu Login */}
         <form onSubmit={handleLogin} style={cardStyle}>
 
@@ -54,6 +49,7 @@ const Login = ({ onLogin }) => {
             <div style={logoWrap}>🏘️</div>
             <h1 style={titleStyle}>SIMAKARTI</h1>
             <p style={subtitleStyle}>Sistem Informasi Manajemen Kas RT Tiga</p>
+            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#0369a1', fontWeight: '600', letterSpacing: '1px' }}>RT 03 RW 03</p>
           </div>
 
           {/* Error */}
@@ -109,7 +105,7 @@ const Login = ({ onLogin }) => {
             <div style={dividerLine} />
             <p style={creditStyle}>
               © 2025 Developed by{' '}
-              <span style={creditName}>FSL-25</span>
+              <span style={creditName}>FSL-22</span>
             </p>
             <p style={creditSub}>SIMAKARTI v1.0 · All rights reserved</p>
           </div>
