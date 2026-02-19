@@ -104,7 +104,7 @@ const Login = ({ onLogin }) => {
           <div style={creditWrap}>
             <div style={dividerLine} />
             <p style={creditStyle}>
-              © 2025 Developed by{' '}
+              © 2026 Developed by{' '}
               <span style={creditName}>FSL-22</span>
             </p>
             <p style={creditSub}>SIMAKARTI v1.0 · All rights reserved</p>
