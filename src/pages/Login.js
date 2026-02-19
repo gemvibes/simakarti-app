@@ -49,7 +49,7 @@ const Login = ({ onLogin }) => {
             <div style={logoWrap}>🏘️</div>
             <h1 style={titleStyle}>SIMAKARTI</h1>
             <p style={subtitleStyle}>Sistem Informasi Manajemen Kas RT Tiga</p>
-            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#0369a1', fontWeight: '600', letterSpacing: '1px' }}>RT 03 RW 03</p>
+            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#0369a1', fontWeight: '600', letterSpacing: '1px' }}>Kel. Purwokerto Lor</p>
           </div>
 
           {/* Error */}
