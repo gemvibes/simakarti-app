@@ -81,10 +81,8 @@ function App() {
         {isDawis     && <NavBtn label="📝 Iuran Warga" active={activeTab === 'iuran'}    onClick={() => setActiveTab('iuran')} />}
         {isHumas     && <NavBtn label="🧾 Iuran Toko"  active={activeTab === 'iurantoko'} onClick={() => setActiveTab('iurantoko')} />}
         {isBendahara && <NavBtn label="✅ Approval"    active={activeTab === 'approve'}  onClick={() => setActiveTab('approve')} />}
-        {/* Data Warga — semua kecuali dawis & warga */}
-        {!isDawis && user.role !== 'warga' && (
-          <NavBtn label="👥 Data Warga" active={activeTab === 'warga'} onClick={() => setActiveTab('warga')} />
-        )}
+        {/* Data Warga — semua akun bisa lihat */}
+        <NavBtn label="👥 Data Warga" active={activeTab === 'warga'} onClick={() => setActiveTab('warga')} />
         {/* Data Toko — semua akun bisa lihat */}
         <NavBtn label="🏪 Data Toko"  active={activeTab === 'datatoko'} onClick={() => setActiveTab('datatoko')} />
         <NavBtn label="📅 Kegiatan"   active={activeTab === 'kegiatan'} onClick={() => setActiveTab('kegiatan')} />
