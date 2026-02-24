@@ -116,7 +116,7 @@ const Dashboard = ({ user, setActiveTab }) => {
     finally { setLoadingGrafik(false); }
   };
 
-  // ── RENDER GRAFIK SVG ──
+  // ── RENDER GRAFIK SVG RESPONSIF ──
   const renderGrafik = () => {
     if (grafikData.length === 0) return (
       <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontSize: '13px' }}>
@@ -124,7 +124,8 @@ const Dashboard = ({ user, setActiveTab }) => {
       </div>
     );
 
-    const W = 700, H = 260, padL = 80, padR = 20, padT = 20, padB = 40;
+    // ViewBox tetap, SVG mengikuti lebar container
+    const W = 360, H = 220, padL = 52, padR = 12, padT = 16, padB = 32;
     const innerW = W - padL - padR;
     const innerH = H - padT - padB;
 
@@ -134,89 +135,88 @@ const Dashboard = ({ user, setActiveTab }) => {
     const range   = maxVal - minVal || 1;
 
     const xStep = innerW / Math.max(grafikData.length - 1, 1);
+    const toX   = (i)   => padL + i * xStep;
+    const toY   = (val) => padT + innerH - ((val - minVal) / range) * innerH;
 
-    const toX = (i)   => padL + i * xStep;
-    const toY = (val) => padT + innerH - ((val - minVal) / range) * innerH;
+    const pathRT  = grafikData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${toX(i).toFixed(1)} ${toY(d.rt).toFixed(1)}`).join(' ');
+    const pathKGR = grafikData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${toX(i).toFixed(1)} ${toY(d.kgr).toFixed(1)}`).join(' ');
 
-    const pathRT  = grafikData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${toX(i)} ${toY(d.rt)}`).join(' ');
-    const pathKGR = grafikData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${toX(i)} ${toY(d.kgr)}`).join(' ');
+    const areaRT = `M ${toX(0).toFixed(1)} ${toY(grafikData[0].rt).toFixed(1)} ` +
+      grafikData.map((d, i) => `L ${toX(i).toFixed(1)} ${toY(d.rt).toFixed(1)}`).join(' ') +
+      ` L ${toX(grafikData.length - 1).toFixed(1)} ${(padT + innerH).toFixed(1)} L ${toX(0).toFixed(1)} ${(padT + innerH).toFixed(1)} Z`;
 
-    // Area fill RT
-    const areaRT = `M ${toX(0)} ${toY(grafikData[0].rt)} ` +
-      grafikData.map((d, i) => `L ${toX(i)} ${toY(d.rt)}`).join(' ') +
-      ` L ${toX(grafikData.length - 1)} ${padT + innerH} L ${toX(0)} ${padT + innerH} Z`;
+    const areaKGR = `M ${toX(0).toFixed(1)} ${toY(grafikData[0].kgr).toFixed(1)} ` +
+      grafikData.map((d, i) => `L ${toX(i).toFixed(1)} ${toY(d.kgr).toFixed(1)}`).join(' ') +
+      ` L ${toX(grafikData.length - 1).toFixed(1)} ${(padT + innerH).toFixed(1)} L ${toX(0).toFixed(1)} ${(padT + innerH).toFixed(1)} Z`;
 
-    const areaKGR = `M ${toX(0)} ${toY(grafikData[0].kgr)} ` +
-      grafikData.map((d, i) => `L ${toX(i)} ${toY(d.kgr)}`).join(' ') +
-      ` L ${toX(grafikData.length - 1)} ${padT + innerH} L ${toX(0)} ${padT + innerH} Z`;
-
-    // Garis bantu Y (5 garis)
-    const yTicks = 5;
+    const yTicks = 4;
     const yLines = Array.from({ length: yTicks + 1 }, (_, i) => {
       const val = minVal + (range / yTicks) * i;
-      const y   = toY(val);
-      return { val, y };
+      return { val, y: toY(val) };
     });
 
     const fmtRp = (v) => {
       if (Math.abs(v) >= 1000000) return `${(v / 1000000).toFixed(1)}jt`;
       if (Math.abs(v) >= 1000)    return `${(v / 1000).toFixed(0)}rb`;
-      return `${v}`;
+      return `${Math.round(v)}`;
     };
 
+    // Hanya tampilkan label bulan yang tidak terlalu padat
+    // Di HP kecil (data 12 bulan) tampilkan selang-seling
+    const showLabel = (i) => grafikData.length <= 6 ? true : i % 2 === 0 || i === grafikData.length - 1;
+
     return (
-      <div style={{ overflowX: 'auto' }}>
-        <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ minWidth: '400px', display: 'block' }}>
-          <defs>
-            <linearGradient id="gradRT" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
-            </linearGradient>
-            <linearGradient id="gradKGR" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.02" />
-            </linearGradient>
-          </defs>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        style={{ width: '100%', height: 'auto', display: 'block' }}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <defs>
+          <linearGradient id="gradRT" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          </linearGradient>
+          <linearGradient id="gradKGR" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
 
-          {/* Grid garis Y */}
-          {yLines.map(({ val, y }, i) => (
-            <g key={i}>
-              <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="#e2e8f0" strokeWidth="1" strokeDasharray="4,3" />
-              <text x={padL - 6} y={y + 4} textAnchor="end" fontSize="10" fill="#94a3b8">{fmtRp(val)}</text>
-            </g>
-          ))}
+        {/* Grid Y */}
+        {yLines.map(({ val, y }, i) => (
+          <g key={i}>
+            <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="#e2e8f0" strokeWidth="0.5" strokeDasharray="3,3" />
+            <text x={padL - 4} y={y + 3} textAnchor="end" fontSize="8" fill="#94a3b8">{fmtRp(val)}</text>
+          </g>
+        ))}
 
-          {/* Area fill */}
-          <path d={areaRT}  fill="url(#gradRT)" />
-          <path d={areaKGR} fill="url(#gradKGR)" />
+        {/* Area */}
+        <path d={areaRT}  fill="url(#gradRT)" />
+        <path d={areaKGR} fill="url(#gradKGR)" />
 
-          {/* Garis utama */}
-          <path d={pathRT}  fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-          <path d={pathKGR} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        {/* Garis */}
+        <path d={pathRT}  fill="none" stroke="#10b981" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={pathKGR} fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
 
-          {/* Titik + tooltip per bulan */}
-          {grafikData.map((d, i) => (
-            <g key={i}>
-              {/* Label bulan */}
-              <text x={toX(i)} y={H - 8} textAnchor="middle" fontSize="10" fill="#64748b">{d.bulan}</text>
+        {/* Titik & label bulan */}
+        {grafikData.map((d, i) => (
+          <g key={i}>
+            {showLabel(i) && (
+              <text x={toX(i)} y={H - 4} textAnchor="middle" fontSize="8" fill="#64748b">{d.bulan}</text>
+            )}
+            <circle cx={toX(i)} cy={toY(d.rt)}  r="3" fill="#10b981" stroke="white" strokeWidth="1.5">
+              <title>Kas RT {d.bulan}: Rp {d.rt.toLocaleString('id-ID')}</title>
+            </circle>
+            <circle cx={toX(i)} cy={toY(d.kgr)} r="3" fill="#f59e0b" stroke="white" strokeWidth="1.5">
+              <title>Kas KGR {d.bulan}: Rp {d.kgr.toLocaleString('id-ID')}</title>
+            </circle>
+          </g>
+        ))}
 
-              {/* Titik RT */}
-              <circle cx={toX(i)} cy={toY(d.rt)} r="4" fill="#10b981" stroke="white" strokeWidth="2">
-                <title>Kas RT {d.bulan}: Rp {d.rt.toLocaleString('id-ID')}</title>
-              </circle>
-
-              {/* Titik KGR */}
-              <circle cx={toX(i)} cy={toY(d.kgr)} r="4" fill="#f59e0b" stroke="white" strokeWidth="2">
-                <title>Kas KGR {d.bulan}: Rp {d.kgr.toLocaleString('id-ID')}</title>
-              </circle>
-            </g>
-          ))}
-
-          {/* Garis batas kiri & bawah */}
-          <line x1={padL} y1={padT} x2={padL} y2={padT + innerH} stroke="#e2e8f0" strokeWidth="1" />
-          <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="#e2e8f0" strokeWidth="1" />
-        </svg>
-      </div>
+        {/* Border */}
+        <line x1={padL} y1={padT} x2={padL} y2={padT + innerH} stroke="#e2e8f0" strokeWidth="0.5" />
+        <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="#e2e8f0" strokeWidth="0.5" />
+      </svg>
     );
   };
 
