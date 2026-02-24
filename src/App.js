@@ -27,7 +27,6 @@ function App() {
   const isBendahara = user.role === 'bendahara';
   const isHumas     = user.role === 'humas';
   const isAdmin     = ['ketua', 'sekretaris'].includes(user.role);
-  const canDataToko = ['ketua', 'sekretaris', 'humas'].includes(user.role);
 
   const getRoleLabel = (role) => {
     const map = { ketua: 'Ketua RT', sekretaris: 'Sekretaris', bendahara: 'Bendahara', humas: 'Humas', warga: 'Warga' };
@@ -77,28 +76,30 @@ function App() {
         position: 'sticky', top: 0, zIndex: 100,
         boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
       }}>
-        <NavBtn label="🏠 Dashboard"   active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-        <NavBtn label="💰 Kas"         active={activeTab === 'kas'}       onClick={() => setActiveTab('kas')} />
-        {isDawis      && <NavBtn label="📝 Iuran Warga" active={activeTab === 'iuran'}    onClick={() => setActiveTab('iuran')} />}
-        {isHumas      && <NavBtn label="🏪 Iuran Toko"  active={activeTab === 'toko'}     onClick={() => setActiveTab('toko')} />}
-        {isBendahara  && <NavBtn label="✅ Approval"    active={activeTab === 'approve'}  onClick={() => setActiveTab('approve')} />}
-        {/* Data Warga — semua kecuali dawis */}
-        {!isDawis     && <NavBtn label="👥 Data Warga"  active={activeTab === 'warga'}    onClick={() => setActiveTab('warga')} />}
-        {/* Data Toko — hanya humas, ketua, sekretaris */}
-        {canDataToko  && <NavBtn label="🏪 Data Toko"   active={activeTab === 'datatoko'} onClick={() => setActiveTab('datatoko')} />}
-        <NavBtn label="📅 Kegiatan"    active={activeTab === 'kegiatan'}  onClick={() => setActiveTab('kegiatan')} />
+        <NavBtn label="🏠 Dashboard"  active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+        <NavBtn label="💰 Kas"        active={activeTab === 'kas'}       onClick={() => setActiveTab('kas')} />
+        {isDawis     && <NavBtn label="📝 Iuran Warga" active={activeTab === 'iuran'}    onClick={() => setActiveTab('iuran')} />}
+        {isHumas     && <NavBtn label="🧾 Iuran Toko"  active={activeTab === 'iurantoko'} onClick={() => setActiveTab('iurantoko')} />}
+        {isBendahara && <NavBtn label="✅ Approval"    active={activeTab === 'approve'}  onClick={() => setActiveTab('approve')} />}
+        {/* Data Warga — semua kecuali dawis & warga */}
+        {!isDawis && user.role !== 'warga' && (
+          <NavBtn label="👥 Data Warga" active={activeTab === 'warga'} onClick={() => setActiveTab('warga')} />
+        )}
+        {/* Data Toko — semua akun bisa lihat */}
+        <NavBtn label="🏪 Data Toko"  active={activeTab === 'datatoko'} onClick={() => setActiveTab('datatoko')} />
+        <NavBtn label="📅 Kegiatan"   active={activeTab === 'kegiatan'} onClick={() => setActiveTab('kegiatan')} />
       </nav>
 
       {/* ── KONTEN ── */}
       <main style={{ padding: '20px' }}>
-        {activeTab === 'dashboard' && <Dashboard user={user} setActiveTab={setActiveTab} />}
-        {activeTab === 'kas'       && <MutasiKas user={user} />}
-        {activeTab === 'iuran'     && <InputIuran user={user} />}
-        {activeTab === 'toko'      && <InputIuranToko user={user} />}
-        {activeTab === 'approve'   && <Approval user={user} />}
-        {activeTab === 'warga'     && <DataWarga user={user} />}
-        {activeTab === 'datatoko'  && <DataToko user={user} />}
-        {activeTab === 'kegiatan'  && <KegiatanRT user={user} />}
+        {activeTab === 'dashboard'  && <Dashboard user={user} setActiveTab={setActiveTab} />}
+        {activeTab === 'kas'        && <MutasiKas user={user} />}
+        {activeTab === 'iuran'      && <InputIuran user={user} />}
+        {activeTab === 'iurantoko'  && <InputIuranToko user={user} />}
+        {activeTab === 'approve'    && <Approval user={user} />}
+        {activeTab === 'warga'      && <DataWarga user={user} />}
+        {activeTab === 'datatoko'   && <DataToko user={user} />}
+        {activeTab === 'kegiatan'   && <KegiatanRT user={user} />}
       </main>
     </div>
   );
