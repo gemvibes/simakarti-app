@@ -10,16 +10,7 @@ const RekapIuran = ({ user }) => {
 
   const BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
 
-  // Akses kontrol
-  const allowedRoles = ['bendahara', 'ketua', 'sekretaris'];
-  if (!allowedRoles.includes(user.role)) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center', color: '#e74c3c' }}>
-        🚫 Akses ditolak. Halaman ini hanya untuk Bendahara, Ketua, dan Sekretaris.
-      </div>
-    );
-  }
-
+  // Semua hooks harus di atas sebelum return apapun
   useEffect(() => {
     fetchData();
   }, [tahun]);
@@ -27,7 +18,6 @@ const RekapIuran = ({ user }) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Ambil semua warga aktif
       const { data: warga } = await supabase
         .from('warga')
         .select('id, nama_lengkap, dawis, tipe_subjek')
@@ -35,7 +25,6 @@ const RekapIuran = ({ user }) => {
         .order('dawis', { ascending: true })
         .order('nama_lengkap', { ascending: true });
 
-      // Ambil semua mutasi APPROVED di tahun yang dipilih
       const startDate = `${tahun}-01-01`;
       const endDate = `${tahun}-12-31`;
       const { data: mutasi } = await supabase
@@ -71,9 +60,8 @@ const RekapIuran = ({ user }) => {
   // Hitung jumlah yang sudah setor per bulan (untuk baris total)
   const hitungSetor = (bulanIndex, tipeKas) => {
     const daftarWarga = activeTab === 'RT'
-      ? wargaList  // Semua warga & toko untuk RT
-      : wargaList.filter(w => w.tipe_subjek === 'Warga'); // Hanya warga untuk KGR
-
+      ? wargaList
+      : wargaList.filter(w => w.tipe_subjek === 'Warga');
     return daftarWarga.filter(w => sudahSetor(w.id, bulanIndex, tipeKas)).length;
   };
 
@@ -88,7 +76,17 @@ const RekapIuran = ({ user }) => {
   };
 
   const totalWarga = filteredWarga.length;
-  const bulanSekarang = new Date().getMonth(); // 0-indexed
+  const bulanSekarang = new Date().getMonth();
+
+  // Akses kontrol — setelah semua hooks
+  const allowedRoles = ['bendahara', 'ketua', 'sekretaris'];
+  if (!allowedRoles.includes(user.role)) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', color: '#e74c3c' }}>
+        🚫 Akses ditolak. Halaman ini hanya untuk Bendahara, Ketua, dan Sekretaris.
+      </div>
+    );
+  }
 
   if (loading) return (
     <div style={{ padding: '40px', textAlign: 'center', color: '#7f8c8d' }}>
@@ -182,7 +180,6 @@ const RekapIuran = ({ user }) => {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
             <thead>
-              {/* Baris header bulan */}
               <tr style={{ background: activeTab === 'RT' ? '#27ae60' : '#2980b9', color: 'white' }}>
                 <th style={{ ...thS, textAlign: 'left', minWidth: '180px', position: 'sticky', left: 0, background: activeTab === 'RT' ? '#219150' : '#1a6fa0', zIndex: 2 }}>
                   Nama Warga
